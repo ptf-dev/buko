@@ -28,7 +28,6 @@ import {
   updateSettings,
   updateTerms,
 } from './finance.js'
-import { TIMEZONE } from './time.js'
 import { iban, int, lekToQ, nipt, num, oneOf, optStr, str } from './validate.js'
 
 /**
