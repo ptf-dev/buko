@@ -14,7 +14,9 @@
     "android:open": "cap open android",
     "ios:open": "cap open ios",
     "build:web": "npm run build && node scripts/web-layout.mjs",
-    "serve:local": "node scripts/local-server.mjs"
+    "serve:local": "node scripts/local-server.mjs",
+    "ios:sim-build": "bash scripts/ios-sim-build.sh",
+    "test:mobile": "tapflow flow run .tapflow/flows/guest-browse.yaml .tapflow/flows/account-lifecycle.yaml --junit build/tapflow-report.xml"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

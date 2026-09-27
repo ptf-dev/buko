@@ -126,3 +126,26 @@ Android version codes come from Codemagic's `BUILD_NUMBER`. Release signing read
 ```bash
 .claude/skills/impeccable/scripts/impeccable detect src/dashboard src/landing
 ```
+
+## Mobile testing with tapflow (Mac)
+
+[tapflow](https://github.com/jo-duchan/tapflow) runs the real iOS Simulator and Android emulator in your browser and replays the test flows in `.tapflow/flows/`.
+
+1. Install and start it: `npm install -g tapflow && tapflow setup && tapflow start`, then open http://localhost:4000 and create the admin account.
+2. Build the apps:
+   - Android: `npm run android:apk` → `android/app/build/outputs/apk/debug/app-debug.apk`
+   - iOS: `npm run ios:sim-build` → `build/ngopu-ios-sim.app.zip`
+3. Upload the build in tapflow's **App Center** and note its build id.
+4. Run the flows on a device:
+   ```sh
+   npm run test:mobile -- --device "iPhone 17" --build <build-id>
+   npm run test:mobile -- --device "Pixel_8" --build <android-build-id>
+   ```
+
+| Flow | What it checks |
+|---|---|
+| `guest-browse` | Intro → browse as a guest → open a store → Reserve asks you to log in. No side effects. |
+| `account-lifecycle` | Sign up in onboarding → log out → log in → delete the account. Uses the live API with the test account `tapflow-e2e@ngopu.app` and deletes it at the end. |
+| `cleanup-test-account` | Run once if `account-lifecycle` stopped halfway and left the test account behind. |
+
+Failure screenshots go to `.tapflow/artifacts/`, the JUnit report to `build/tapflow-report.xml`. The flows don't reserve bags, because that would take real stock from live stores.

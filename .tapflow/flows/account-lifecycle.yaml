@@ -1,0 +1,47 @@
+# Sign up in onboarding → log out → log back in → delete the account.
+# Uses the live API, and deletes the test account at the end so the next run can sign up again.
+# If a run stops halfway, run cleanup-test-account.yaml once before retrying.
+name: account-lifecycle
+appId: al.ngopu.app
+steps:
+  - clearState
+  - launchApp
+  - assertVisible: { label: "Rescue delicious food", timeout: 30 }
+  - tapOn: "Skip"
+  - assertVisible: { label: "Save your bags", timeout: 15 }
+  # Create account form: Name (0), Email (1), Password (2).
+  - tapOn: { role: input, index: 0 }
+  - inputText: "Tapflow"
+  - tapOn: { role: input, index: 1 }
+  - inputText: "tapflow-e2e@ngopu.app"
+  - tapOn: { role: input, index: 2 }
+  - inputText: "tapflow-e2e-pass"
+  - pressKey: Enter
+  - assertVisible: { label: "Welcome, Tapflow!", timeout: 20 }
+  - tapOn: { label: "Explore Tirana, Qendër", role: button }
+  - assertVisible: { label: "Search stores and food", timeout: 15 }
+
+  - tapOn: "Profile"
+  - assertVisible: "tapflow-e2e@ngopu.app"
+  - scroll
+  - scroll
+  - tapOn: "Log out"
+  - scroll: up
+  - assertVisible: { label: "Guest · not signed in", timeout: 15 }
+
+  - tapOn: { label: "Log in", role: button }
+  - assertVisible: "Welcome back"
+  # Log in form: Email (0), Password (1).
+  - tapOn: { role: input, index: 0 }
+  - inputText: "tapflow-e2e@ngopu.app"
+  - tapOn: { role: input, index: 1 }
+  - inputText: "tapflow-e2e-pass"
+  - pressKey: Enter
+  - assertVisible: { label: "tapflow-e2e@ngopu.app", timeout: 20 }
+
+  - scroll
+  - scroll
+  - tapOn: "Delete account"
+  - tapOn: "Delete account permanently"
+  - scroll: up
+  - assertVisible: { label: "Guest · not signed in", timeout: 15 }

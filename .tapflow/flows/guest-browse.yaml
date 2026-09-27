@@ -1,0 +1,22 @@
+# Guest path: intro → skip the account step → browse → a store → Reserve asks you to log in.
+# No side effects on the live data.
+name: guest-browse
+appId: al.ngopu.app
+steps:
+  - clearState
+  - launchApp
+  - assertVisible: { label: "Rescue delicious food", timeout: 30 }
+  - tapOn: "Skip"
+  - assertVisible: { label: "Save your bags", timeout: 15 }
+  - tapOn: "Just browsing for now"
+  - tapOn: { label: "Explore Tirana, Qendër", role: button }
+  - assertVisible: { label: "Search stores and food", timeout: 15 }
+  - tapOn: "Browse"
+  # Inputs are picked by position: web-view inputs don't expose their labels the same way on iOS and Android.
+  - tapOn: { role: input, index: 0 }
+  # Type part of the name so the search box itself never matches the store name exactly.
+  - inputText: "Fresku"
+  - assertVisible: "1 store within"
+  - tapOn: "Market Fresku"
+  - tapOn: { label: "Reserve", role: button, timeout: 15 }
+  - assertVisible: "Log in to reserve"

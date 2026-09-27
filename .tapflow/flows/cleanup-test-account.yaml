@@ -1,0 +1,25 @@
+# Deletes the tapflow test account if an earlier account-lifecycle run left it behind.
+# Fails at the login step when there's nothing to clean up, which is fine.
+name: cleanup-test-account
+appId: al.ngopu.app
+steps:
+  - clearState
+  - launchApp
+  - assertVisible: { label: "Rescue delicious food", timeout: 30 }
+  - tapOn: "Skip"
+  - assertVisible: { label: "Save your bags", timeout: 15 }
+  - tapOn: { label: "Log in", role: button }
+  - tapOn: { role: input, index: 0 }
+  - inputText: "tapflow-e2e@ngopu.app"
+  - tapOn: { role: input, index: 1 }
+  - inputText: "tapflow-e2e-pass"
+  - pressKey: Enter
+  - assertVisible: { label: "Welcome, Tapflow!", timeout: 20 }
+  - tapOn: { label: "Explore Tirana, Qendër", role: button }
+  - tapOn: { label: "Profile", timeout: 15 }
+  - scroll
+  - scroll
+  - tapOn: "Delete account"
+  - tapOn: "Delete account permanently"
+  - scroll: up
+  - assertVisible: { label: "Guest · not signed in", timeout: 15 }
