@@ -4,6 +4,7 @@ import {
   Bell,
   Clock,
   Globe,
+  LogIn,
   Heart,
   Leaf,
   MapPin,
@@ -640,7 +641,7 @@ function FinalCTA({ platform }: { platform: Platform }) {
 function Footer() {
   const t = useCopy().footer
   return (
-    <footer className="bg-ink py-14 text-white/70">
+    <footer className="bg-ink pt-14 pb-28 text-white/70 md:pb-14">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 md:flex-row md:items-start md:justify-between">
         <div>
           <Logo light />
@@ -685,11 +686,17 @@ function Footer() {
         <p>
           © {new Date().getFullYear()} Ngopu. {t.rights}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <p className="flex items-center gap-1.5">
             <Globe className="h-3.5 w-3.5" /> {t.place}
           </p>
           <LangSwitch dark />
+          <a
+            href="/dashboard/login"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-3.5 text-xs font-bold text-ink transition-colors duration-150 hover:bg-sun"
+          >
+            <LogIn className="h-3.5 w-3.5" aria-hidden /> {t.login}
+          </a>
         </div>
       </div>
     </footer>
