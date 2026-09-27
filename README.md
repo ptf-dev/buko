@@ -57,7 +57,7 @@ DATABASE_URL=postgres://user@localhost:5432/buko npm run serve:local   # http://
 
 ## Website & landing page
 
-Live at **https://buko-five.vercel.app**:
+Live at **https://www.ngopu.app**:
 
 - `/` is the marketing landing page (`landing.html`, `src/landing/`). Its buttons link to the web app, the Android download and the App Store.
 - `/app` is the web app (`index.html`, `src/App.tsx`).

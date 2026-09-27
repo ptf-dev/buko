@@ -32,14 +32,15 @@ const sq: { title: string; intro: string; updated: string; back: string; content
     {
       id: 'customers',
       title: 'Të dhënat e klientëve (aplikacioni)',
-      paragraphs: ['Për të përdorur Ngopu nuk të duhet llogari. Kur rezervon një çantë, në serverin tonë ruhen:'],
+      paragraphs: ['Mund t’i shfletosh dyqanet pa llogari. Për të rezervuar krijon një llogari, dhe në serverin tonë ruhen:'],
       bullets: [
-        'Një identifikues i rastësishëm i pajisjes, i krijuar nga aplikacioni. Nuk përmban emrin, numrin e telefonit apo ndonjë ID të pajisjes nga prodhuesi.',
+        'Llogaria: emri, emaili dhe fjalëkalimi, ky i fundit vetëm në formë të enkriptuar në mënyrë të pakthyeshme (scrypt). Ne nuk e shohim dot fjalëkalimin tënd.',
+        'Një identifikues i rastësishëm i pajisjes, i krijuar nga aplikacioni. Nuk përmban numrin e telefonit apo ndonjë ID të pajisjes nga prodhuesi.',
         'Porosia: dyqani, çanta, sasia, çmimi, orari i marrjes, kodi i marrjes, mënyra e pagesës që zgjodhe (p.sh. „kartë”) dhe statusi (e rezervuar, e marrë, e anuluar).',
         'Vlerësimi që i jep çantës (1–5 yje dhe etiketat që zgjedh), nëse vendos ta japësh.',
       ],
       after: [
-        'Këto qëndrojnë vetëm në pajisjen tënde dhe nuk dërgohen te ne: emri dhe emaili që shkruan në profil, preferencat e dietës, të preferuarat dhe zona që zgjedh.',
+        'Këto qëndrojnë vetëm në pajisjen tënde dhe nuk dërgohen te ne: preferencat e dietës, të preferuarat dhe zona që zgjedh.',
         'Vendndodhja: nëse e lejon, pajisja e përdor vendndodhjen për të treguar dyqanet pranë teje. Llogaritja bëhet në pajisje dhe vendndodhja jote nuk dërgohet në serverët tanë.',
         'Pagesat: gjatë fazës beta pagesat janë simuluar dhe nuk mbledhim të dhëna karte. Kur të nisin pagesat e vërteta, ato do të përpunohen nga një ofrues pagesash dhe kjo politikë do të përditësohet para se të ndodhë.',
       ],
@@ -69,7 +70,7 @@ const sq: { title: string; intro: string; updated: string; back: string; content
       id: 'cookies',
       title: 'Cookies dhe ruajtja në pajisje',
       paragraphs: [
-        'Paneli për partnerët përdor një cookie të vetme të domosdoshme (sesioni i hyrjes). Aplikacioni për klientët ruan preferencat dhe porositë në memorien e pajisjes tënde. Nuk përdorim cookies reklamash.',
+        'Paneli për partnerët përdor një cookie të vetme të domosdoshme (sesioni i hyrjes). Aplikacioni për klientët ruan në memorien e pajisjes tënde sesionin e hyrjes, preferencat dhe porositë. Nuk përdorim cookies reklamash.',
       ],
     },
     {
@@ -89,8 +90,8 @@ const sq: { title: string; intro: string; updated: string; back: string; content
       title: 'Sa kohë i mbajmë',
       bullets: [
         'Porositë: deri në 3 vjet pas porosisë, për llogaritë dhe mosmarrëveshjet, pastaj fshihen ose anonimizohen.',
-        'Llogaritë e partnerëve: për sa kohë llogaria është aktive, ose derisa të kërkosh fshirjen.',
-        'Sesionet e hyrjes: skadojnë pas 30 ditësh.',
+        'Llogaritë e klientëve dhe të partnerëve: për sa kohë llogaria është aktive, ose derisa ta fshish.',
+        'Sesionet e hyrjes: skadojnë pas 30 ditësh në panel dhe pas 180 ditësh në aplikacion.',
       ],
     },
     {
@@ -105,7 +106,8 @@ const sq: { title: string; intro: string; updated: string; back: string; content
       id: 'delete',
       title: 'Si t’i fshish të dhënat',
       bullets: [
-        'Klientët: fshirja e aplikacionit ose e të dhënave të tij heq gjithçka që ruhet në pajisje. Për të fshirë porositë nga serveri, na shkruaj duke përfshirë numrin e porosisë (e gjen te fatura në aplikacion).',
+        'Klientët: te Profili → „Delete account” fshin menjëherë emrin, emailin dhe fjalëkalimin. Porositë e kaluara mbeten për dokumentet e dyqaneve, por pa asnjë lidhje me ty apo me pajisjen tënde. Mund ta kërkosh fshirjen edhe me email nga adresa e llogarisë.',
+        'Fshirja e aplikacionit ose e të dhënave të tij heq gjithçka që ruhet në pajisje.',
         `Partnerët: shkruaj nga emaili i llogarisë në ${CONTACT_EMAIL} dhe do ta fshijmë llogarinë dhe dyqanin.`,
       ],
     },
@@ -148,14 +150,15 @@ const en: typeof sq = {
     {
       id: 'customers',
       title: 'Customer data (the app)',
-      paragraphs: ['You don’t need an account to use Ngopu. When you reserve a bag, our server stores:'],
+      paragraphs: ['You can browse stores without an account. To reserve, you create one, and our server stores:'],
       bullets: [
-        'A random device identifier created by the app. It contains no name, phone number or manufacturer device ID.',
+        'Your account: name, email and password, the password only as a one-way hash (scrypt). We can’t see your password.',
+        'A random device identifier created by the app. It contains no phone number or manufacturer device ID.',
         'The order: store, bag, quantity, price, pickup window, pickup code, the payment method you chose (e.g. “card”) and its status (reserved, collected, cancelled).',
         'The rating you give the bag (1–5 stars and the tags you pick), if you choose to rate it.',
       ],
       after: [
-        'These stay only on your device and are not sent to us: the name and email you type in your profile, diet preferences, favourites and the area you choose.',
+        'These stay only on your device and are not sent to us: diet preferences, favourites and the area you choose.',
         'Location: if you allow it, your device uses your location to show nearby stores. The calculation happens on the device and your location is not sent to our servers.',
         'Payments: during the beta, payments are simulated and we collect no card data. When real payments start, they will be handled by a payment provider and this policy will be updated before that happens.',
       ],
@@ -185,7 +188,7 @@ const en: typeof sq = {
       id: 'cookies',
       title: 'Cookies and on-device storage',
       paragraphs: [
-        'The partner dashboard uses a single essential cookie (the login session). The customer app keeps your preferences and orders in your device’s storage. We don’t use advertising cookies.',
+        'The partner dashboard uses a single essential cookie (the login session). The customer app keeps your login session, preferences and orders in your device’s storage. We don’t use advertising cookies.',
       ],
     },
     {
@@ -205,8 +208,8 @@ const en: typeof sq = {
       title: 'How long we keep it',
       bullets: [
         'Orders: up to 3 years after the order, for accounting and disputes, then deleted or anonymised.',
-        'Partner accounts: as long as the account is active, or until you ask us to delete it.',
-        'Login sessions: expire after 30 days.',
+        'Customer and partner accounts: as long as the account is active, or until you delete it.',
+        'Login sessions: expire after 30 days on the dashboard and 180 days in the app.',
       ],
     },
     {
@@ -221,7 +224,8 @@ const en: typeof sq = {
       id: 'delete',
       title: 'How to delete your data',
       bullets: [
-        'Customers: deleting the app or its data removes everything stored on your device. To delete your orders from our server, email us with the order number (shown on the receipt in the app).',
+        'Customers: Profile → “Delete account” erases your name, email and password immediately. Past orders stay for the stores’ records but are no longer linked to you or your device. You can also ask by email from your account address.',
+        'Deleting the app or its data removes everything stored on your device.',
         `Partners: email ${CONTACT_EMAIL} from your account email and we’ll delete the account and store.`,
       ],
     },

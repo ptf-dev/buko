@@ -1,10 +1,11 @@
 import { Clock, Leaf, LocateFixed, MapPin, ShoppingBag } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AuthForm } from '../components/AuthForm'
 import { Button } from '../components/Button'
 import { useGeolocation } from '../components/LocationSheet'
 import { APP_NAME, DEFAULT_LOCATION } from '../config'
-import { useAppState, useDispatch } from '../state/store'
+import { useAccount, useAppState, useDispatch, useSync } from '../state/store'
 
 const SLIDES = [
   {
@@ -28,20 +29,28 @@ export function Onboarding() {
   const { onboarded, profile } = useAppState()
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const { live } = useSync()
+  const { account } = useAccount()
   const [step, setStep] = useState(0)
   const [name, setName] = useState(profile.name)
   const geo = useGeolocation()
-  const onSetup = step === SLIDES.length
+  // After the slides: an account step (only when the server is reachable), then location.
+  const [phase, setPhase] = useState<'slides' | 'account' | 'setup'>('slides')
+  const afterSlides = () => setPhase(live && !account ? 'account' : 'setup')
 
   const finish = (lat = DEFAULT_LOCATION.lat, lng = DEFAULT_LOCATION.lng, label = DEFAULT_LOCATION.label) => {
-    dispatch({ type: 'completeOnboarding', name, location: { ...DEFAULT_LOCATION, lat, lng, label } })
+    dispatch({
+      type: 'completeOnboarding',
+      name: account?.name ?? name,
+      location: { ...DEFAULT_LOCATION, lat, lng, label },
+    })
     navigate('/', { replace: true })
   }
 
   const next = () => {
     if (step < SLIDES.length - 1) setStep(step + 1)
     else if (onboarded) navigate(-1)
-    else setStep(SLIDES.length)
+    else afterSlides()
   }
 
   return (
@@ -51,7 +60,7 @@ export function Onboarding() {
         <span className="text-sun">.</span>
       </p>
 
-      {!onSetup ? (
+      {phase === 'slides' ? (
         <>
           <div key={step} className="animate-fade-in flex flex-1 flex-col items-center justify-center text-center">
             {(() => {
@@ -74,25 +83,36 @@ export function Onboarding() {
             {step < SLIDES.length - 1 ? 'Next' : onboarded ? 'Done' : 'Get started'}
           </Button>
           {!onboarded && step < SLIDES.length - 1 && (
-            <button type="button" onClick={() => setStep(SLIDES.length)} className="mt-3 text-sm font-semibold text-mint">
+            <button type="button" onClick={afterSlides} className="mt-3 text-sm font-semibold text-mint">
               Skip
             </button>
           )}
         </>
+      ) : phase === 'account' ? (
+        <div className="animate-fade-in flex flex-1 flex-col justify-center py-6">
+          <h1 className="text-3xl font-bold">Save your bags</h1>
+          <p className="mt-2 mb-6 text-mint">An account keeps your orders and pickup codes safe on any phone. You need one to reserve.</p>
+          <AuthForm tone="dark" defaultName={name} onDone={() => setPhase('setup')} />
+          <button type="button" onClick={() => setPhase('setup')} className="mt-4 text-sm font-semibold text-mint">
+            Just browsing for now
+          </button>
+        </div>
       ) : (
         <div className="animate-fade-in flex flex-1 flex-col">
           <div className="flex flex-1 flex-col justify-center">
-            <h1 className="text-3xl font-bold">Let’s get you set up</h1>
-            <label className="mt-8 block text-sm font-semibold text-mint">
-              What should we call you?
-              <input
-                autoFocus
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your first name"
-                className="mt-2 h-12 w-full rounded-xl bg-white px-4 text-base font-normal text-ink outline-none placeholder:text-muted"
-              />
-            </label>
+            <h1 className="text-3xl font-bold">{account ? `Welcome, ${account.name}!` : 'Let’s get you set up'}</h1>
+            {!account && (
+              <label className="mt-8 block text-sm font-semibold text-mint">
+                What should we call you?
+                <input
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your first name"
+                  className="mt-2 h-12 w-full rounded-xl bg-white px-4 text-base font-normal text-ink outline-none placeholder:text-muted"
+                />
+              </label>
+            )}
             <p className="mt-8 text-sm font-semibold text-mint">Where do you want to find food?</p>
             {geo.status === 'error' && (
               <p className="mt-2 text-sm text-sun">We couldn’t access your location. You can use the city centre instead.</p>

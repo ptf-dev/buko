@@ -182,6 +182,20 @@ function slugify(name) {
   return `${base || 'store'}-${newId().slice(0, 4)}`
 }
 
+/**
+ * Who is acting on customer orders: always the device, plus the signed-in customer account if any.
+ * @param {Request} req @param {unknown} rawDevice
+ */
+async function customerContext(req, rawDevice) {
+  const device = deviceId(rawDevice)
+  const user = await currentUser(req)
+  return { device, userId: user?.role === 'customer' ? user.id : null }
+}
+
+/** SQL condition: the order belongs to this device or this customer account. Uses params $2 (device) and $3 (user). */
+/** Account orders belong to the account only; older device-only orders still belong to the device. */
+const OWNS_ORDER = '((user_id is null and device_id = $2) or ($3::text is not null and user_id = $3))'
+
 /* ------------------------------------------------------------------ */
 /* Customer endpoints                                                  */
 /* ------------------------------------------------------------------ */
@@ -199,11 +213,12 @@ async function listStores() {
 }
 
 /** @type {Handler} */
-async function createOrder({ body }) {
+async function createOrder({ req, body }) {
   const storeId = str(body.storeId, 'Store', { max: 80 })
   const quantity = int(body.quantity, 'Quantity', 1, MAX_PER_ORDER)
   const payment = oneOf(body.paymentMethod, 'Payment method', PAYMENT_METHODS)
-  const device = deviceId(body.deviceId)
+  const { device, userId } = await customerContext(req, body.deviceId)
+  if (!userId) throw new HttpError(401, 'Log in or create an account to reserve.')
   const order = await tx(async (c) => {
     const { rows } = await c.query(
       `select b.*, s.status from bags b join stores s on s.id = b.store_id where b.store_id = $1 for update of b`,
@@ -217,9 +232,9 @@ async function createOrder({ body }) {
     const { start, end } = resolveWindow({ day: bag.pickup_day, start: bag.pickup_start, end: bag.pickup_end }, now)
     await c.query('update bags set quantity = quantity - $1, updated_at = now() where store_id = $2', [quantity, storeId])
     const ins = await c.query(
-      `insert into orders (id, store_id, bag_id, device_id, quantity, unit_price, unit_original_price, pickup_start, pickup_end, pickup_code, status, payment_method)
-       values ($1,$2,$3,$4,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,'reserved',$11) returning *`,
-      [newId(), storeId, bag.id, device, quantity, bag.price, bag.original_price, start, end, pickupCode(), payment],
+      `insert into orders (id, store_id, bag_id, device_id, user_id, quantity, unit_price, unit_original_price, pickup_start, pickup_end, pickup_code, status, payment_method)
+       values ($1,$2,$3,$4,$12,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,'reserved',$11) returning *`,
+      [newId(), storeId, bag.id, device, quantity, bag.price, bag.original_price, start, end, pickupCode(), payment, userId],
     )
     return ins.rows[0]
   })
@@ -227,24 +242,27 @@ async function createOrder({ body }) {
 }
 
 /** @type {Handler} */
-async function deviceOrders({ url }) {
-  const device = deviceId(url.searchParams.get('deviceId'))
-  const { rows } = await query('select * from orders where device_id = $1 order by created_at desc limit 100', [device])
+async function deviceOrders({ req, url }) {
+  const { device, userId } = await customerContext(req, url.searchParams.get('deviceId'))
+  const { rows } = await query(
+    `select * from orders where (user_id is null and device_id = $1) or ($2::text is not null and user_id = $2) order by created_at desc limit 100`,
+    [device, userId],
+  )
   return { body: { orders: rows.map(toOrder) } }
 }
 
-/** @param {string} id @param {string} device */
-async function ownOrder(id, device) {
-  const { rows } = await query('select * from orders where id = $1 and device_id = $2', [id, device])
+/** @param {string} id @param {{ device: string, userId: string | null }} who */
+async function ownOrder(id, who) {
+  const { rows } = await query(`select * from orders where id = $1 and ${OWNS_ORDER}`, [id, who.device, who.userId])
   if (!rows[0]) throw new HttpError(404, 'Order not found.')
   return rows[0]
 }
 
 /** @type {Handler} */
-async function cancelOrder({ params, body }) {
-  const device = deviceId(body.deviceId)
+async function cancelOrder({ req, params, body }) {
+  const who = await customerContext(req, body.deviceId)
   const order = await tx(async (c) => {
-    const { rows } = await c.query('select * from orders where id = $1 and device_id = $2 for update', [params.id, device])
+    const { rows } = await c.query(`select * from orders where id = $1 and ${OWNS_ORDER} for update`, [params.id, who.device, who.userId])
     const o = rows[0]
     if (!o) throw new HttpError(404, 'Order not found.')
     if (o.status !== 'reserved') throw new HttpError(409, 'This order can no longer be cancelled.')
@@ -258,9 +276,8 @@ async function cancelOrder({ params, body }) {
 }
 
 /** @type {Handler} */
-async function collectOrder({ params, body }) {
-  const device = deviceId(body.deviceId)
-  const o = await ownOrder(params.id, device)
+async function collectOrder({ req, params, body }) {
+  const o = await ownOrder(params.id, await customerContext(req, body.deviceId))
   if (o.status === 'cancelled') throw new HttpError(409, 'This order was cancelled.')
   const { rows } = await query(
     `update orders set status = 'collected', collected_at = coalesce(collected_at, now()) where id = $1 returning *`,
@@ -270,12 +287,12 @@ async function collectOrder({ params, body }) {
 }
 
 /** @type {Handler} */
-async function rateOrder({ params, body }) {
-  const device = deviceId(body.deviceId)
+async function rateOrder({ req, params, body }) {
+  const who = await customerContext(req, body.deviceId)
   const rating = int(body.rating, 'Rating', 1, 5)
   const tags = Array.isArray(body.tags) ? body.tags.filter((/** @type {unknown} */ t) => RATING_TAGS.includes(/** @type {string} */ (t))) : []
   const order = await tx(async (c) => {
-    const { rows } = await c.query('select * from orders where id = $1 and device_id = $2 for update', [params.id, device])
+    const { rows } = await c.query(`select * from orders where id = $1 and ${OWNS_ORDER} for update`, [params.id, who.device, who.userId])
     const o = rows[0]
     if (!o) throw new HttpError(404, 'Order not found.')
     if (o.status !== 'collected') throw new HttpError(409, 'You can rate an order after collecting it.')
@@ -317,7 +334,7 @@ async function setup({ body, secure }) {
     if (rows[0]) throw new HttpError(409, 'Ngopu is already set up. Log in instead.')
     await c.query(`insert into users (id, email, name, password_hash, role) values ($1,$2,$3,$4,'admin')`, [id, mail, name, hash])
   })
-  const cookie = await createSession(id, secure)
+  const { cookie } = await createSession(id, secure)
   return { status: 201, body: { user: { id, email: mail, name, role: 'admin', storeId: null, storeStatus: null } }, headers: { 'Set-Cookie': cookie } }
 }
 
@@ -331,8 +348,58 @@ async function login({ body, secure }) {
   )
   const user = rows[0]
   if (!user || !(await verifyPassword(pw, user.password_hash))) throw new HttpError(401, 'Wrong email or password.')
-  const cookie = await createSession(user.id, secure)
+  // The customer app and the store dashboard have separate kinds of account.
+  const fromApp = body.client === 'app'
+  if (fromApp && user.role !== 'customer')
+    throw new HttpError(403, 'This email belongs to a store or team account. Log in to the dashboard instead, or use another email for the app.')
+  if (!fromApp && user.role === 'customer') throw new HttpError(403, 'This is a customer account. Log in in the Ngopu app.')
+  const { cookie, token } = await createSession(user.id, secure, fromApp)
+  if (fromApp) {
+    if (body.deviceId) await claimDeviceOrders(user.id, deviceId(body.deviceId))
+    return { body: { user: publicUser(user), token } }
+  }
   return { body: { user: publicUser(user) }, headers: { 'Set-Cookie': cookie } }
+}
+
+/** Attaches orders placed on this device before signing in to the customer's account. */
+/** @param {string} userId @param {string} device */
+async function claimDeviceOrders(userId, device) {
+  await query('update orders set user_id = $1 where device_id = $2 and user_id is null', [userId, device])
+}
+
+/** Customer sign-up from the app. Returns a bearer token (no cookie). */
+/** @type {Handler} */
+async function signup({ body, secure }) {
+  const name = str(body.name, 'Name', { max: 80 })
+  const mail = email(body.email)
+  const hash = await hashPassword(password(body.password))
+  const id = newId('u_')
+  const exists = await query('select 1 from users where email = $1', [mail])
+  if (exists.rows[0]) throw new HttpError(409, 'An account with this email already exists. Log in instead.')
+  await query(`insert into users (id, email, name, password_hash, role) values ($1,$2,$3,$4,'customer')`, [id, mail, name, hash])
+  if (body.deviceId) await claimDeviceOrders(id, deviceId(body.deviceId))
+  const { token } = await createSession(id, secure, true)
+  return { status: 201, body: { user: { id, email: mail, name, role: 'customer', storeId: null, storeStatus: null }, token } }
+}
+
+/** @type {Handler} */
+async function updateMe({ req, body }) {
+  const user = await requireUser(req, 'customer')
+  const name = str(body.name, 'Name', { max: 80 })
+  await query('update users set name = $2 where id = $1', [user.id, name])
+  return { body: { user: publicUser({ ...user, name }) } }
+}
+
+/** Deletes a customer account (required by the app stores). Past orders stay for the store's records, unlinked from the person. */
+/** @type {Handler} */
+async function deleteMe({ req }) {
+  const user = await requireUser(req, 'customer')
+  await tx(async (c) => {
+    // Orders stay for the stores' records but are detached from both the person and the phone.
+    await c.query(`update orders set device_id = 'deleted' where user_id = $1`, [user.id])
+    await c.query('delete from users where id = $1', [user.id])
+  })
+  return { body: { ok: true } }
 }
 
 /** @type {Handler} */
@@ -379,7 +446,7 @@ async function apply({ body, secure }) {
       storeId,
     ])
   })
-  const cookie = await createSession(userId, secure)
+  const { cookie } = await createSession(userId, secure)
   return {
     status: 201,
     body: { user: { id: userId, email: mail, name: contactName, role: 'partner', storeId, storeStatus: 'pending' } },
@@ -792,6 +859,9 @@ const ROUTES = [
   ['POST', 'auth/setup', setup],
   ['POST', 'auth/login', login],
   ['POST', 'auth/logout', logout],
+  ['POST', 'auth/signup', signup],
+  ['PATCH', 'auth/me', updateMe],
+  ['DELETE', 'auth/me', deleteMe],
   ['POST', 'apply', apply],
   ['GET', 'partner/overview', partnerOverview],
   ['GET', 'partner/orders', partnerOrders],
@@ -827,4 +897,4 @@ export function match(method, path) {
 }
 
 /** Endpoints the native apps call from another origin (no cookies involved). */
-export const PUBLIC_PREFIXES = ['stores', 'orders', 'health']
+export const PUBLIC_PREFIXES = ['stores', 'orders', 'health', 'auth']

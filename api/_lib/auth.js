@@ -7,6 +7,8 @@ const scrypt = /** @type {(pw: string, salt: string, len: number) => Promise<Buf
 
 export const SESSION_COOKIE = 'buko_session'
 const SESSION_DAYS = 30
+/** Customers stay signed in to the app for longer, like other shopping apps. */
+const APP_SESSION_DAYS = 180
 
 /** @param {string} password */
 export async function hashPassword(password) {
@@ -32,18 +34,23 @@ export function newId(prefix = '') {
 }
 
 /**
- * Creates a session and returns the Set-Cookie header value.
+ * Creates a session. The dashboard uses the httpOnly cookie; the customer app (web and native,
+ * where third-party cookies are unreliable) stores the token and sends it as a Bearer header.
  * @param {string} userId
  * @param {boolean} secure
+ * @param {boolean} [forApp]
+ * @returns {Promise<{ cookie: string, token: string }>}
  */
-export async function createSession(userId, secure) {
+export async function createSession(userId, secure, forApp = false) {
   const token = randomBytes(32).toString('base64url')
-  await query(`insert into sessions (token_hash, user_id, expires_at) values ($1, $2, now() + interval '${SESSION_DAYS} days')`, [
+  const days = forApp ? APP_SESSION_DAYS : SESSION_DAYS
+  await query(`insert into sessions (token_hash, user_id, expires_at) values ($1, $2, now() + make_interval(days => $3))`, [
     sha256(token),
     userId,
+    days,
   ])
   await query('update users set last_login_at = now() where id = $1', [userId])
-  return cookie(token, SESSION_DAYS * 86400, secure)
+  return { cookie: cookie(token, days * 86400, secure), token }
 }
 
 /** @param {string} value @param {number} maxAge @param {boolean} secure */
@@ -53,6 +60,8 @@ function cookie(value, maxAge, secure) {
 
 /** @param {Request} req */
 function readToken(req) {
+  const auth = req.headers.get('authorization') || ''
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim() || null
   const header = req.headers.get('cookie') || ''
   for (const part of header.split(';')) {
     const [k, ...v] = part.trim().split('=')
@@ -69,7 +78,7 @@ export async function destroySession(req, secure) {
 }
 
 /**
- * @typedef {{ id: string, email: string, name: string, role: 'admin' | 'partner', storeId: string | null, storeStatus: string | null }} SessionUser
+ * @typedef {{ id: string, email: string, name: string, role: 'admin' | 'partner' | 'customer', storeId: string | null, storeStatus: string | null }} SessionUser
  */
 
 /**
@@ -90,7 +99,7 @@ export async function currentUser(req) {
   return rows[0] ?? null
 }
 
-/** @param {Request} req @param {'admin' | 'partner'} [role] */
+/** @param {Request} req @param {'admin' | 'partner' | 'customer'} [role] */
 export async function requireUser(req, role) {
   const user = await currentUser(req)
   if (!user) throw new HttpError(401, 'Please log in.')

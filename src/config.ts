@@ -20,10 +20,10 @@ export const DEFAULT_LOCATION: Location = {
 export const CO2E_PER_BAG_KG = 2.7
 
 /** Public address of the web app, used for share links from the native app. Leave empty to share text only. */
-export const WEB_URL: string = 'https://buko-five.vercel.app/app'
+export const WEB_URL: string = 'https://www.ngopu.app/app'
 
 /** Marketing site, linked from the invite-a-friend share. */
-export const LANDING_URL = 'https://buko-five.vercel.app'
+export const LANDING_URL = 'https://www.ngopu.app'
 
 /** Partner & admin dashboard (web only). */
 export const DASHBOARD_URL = `${LANDING_URL}/dashboard`

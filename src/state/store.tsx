@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState, type Dispatch, type ReactNode } from 'react'
-import { customerApi } from '../lib/api'
+import { ApiError, customerApi, customerToken, type CustomerAccount } from '../lib/api'
 import type { Order, PaymentMethod } from '../types'
 import { initialState, randomId, randomPickupCode, reducer, STATE_VERSION, type Action, type AppState } from './reducer'
 
@@ -27,6 +27,19 @@ interface Sync {
   refresh: () => Promise<void>
 }
 const SyncContext = createContext<Sync>({ live: false, refresh: async () => {} })
+
+interface Account {
+  /** Signed-in customer, or null for a guest. */
+  account: CustomerAccount | null
+  /** False until a saved session has been checked with the server. */
+  ready: boolean
+  signup: (name: string, email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<void>
+  logout: () => Promise<void>
+  rename: (name: string) => Promise<void>
+  deleteAccount: () => Promise<void>
+}
+const AccountContext = createContext<Account | null>(null)
 
 /** How often live stock is refreshed while the app is open. */
 const REFRESH_MS = 60_000
@@ -62,6 +75,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const sync = useMemo(() => ({ live, refresh }), [live, refresh])
 
+  const [account, setAccount] = useState<CustomerAccount | null>(null)
+  const [ready, setReady] = useState(() => !customerToken.get())
+
+  useEffect(() => {
+    if (!customerToken.get()) return
+    customerApi
+      .me()
+      .then((user) => {
+        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email })
+        else customerToken.set(null)
+      })
+      .catch((e) => {
+        // Expired or revoked: sign out. Offline: keep the token and try again next launch.
+        if (e instanceof ApiError && e.status === 401) customerToken.set(null)
+      })
+      .finally(() => setReady(true))
+  }, [])
+
+  const accountValue = useMemo<Account>(() => {
+    const signedIn = (user: CustomerAccount, token: string) => {
+      customerToken.set(token)
+      setAccount(user)
+      dispatch({ type: 'updateProfile', profile: { name: user.name, email: user.email } })
+      refresh()
+    }
+    const signedOut = () => {
+      customerToken.set(null)
+      setAccount(null)
+      dispatch({ type: 'clearOrders' })
+      dispatch({ type: 'updateProfile', profile: { email: '' } })
+      refresh()
+    }
+    return {
+      account,
+      ready,
+      async signup(name, email, password) {
+        const r = await customerApi.signup(name, email, password)
+        signedIn(r.user, r.token)
+      },
+      async login(email, password) {
+        const r = await customerApi.login(email, password)
+        signedIn(r.user, r.token)
+      },
+      async logout() {
+        await customerApi.logout().catch(() => {})
+        signedOut()
+      },
+      async rename(name) {
+        const user = await customerApi.rename(name)
+        setAccount(user)
+        dispatch({ type: 'updateProfile', profile: { name: user.name } })
+      },
+      async deleteAccount() {
+        await customerApi.deleteAccount()
+        signedOut()
+      },
+    }
+  }, [account, ready, refresh])
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -73,7 +145,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <StateContext.Provider value={state}>
       <DispatchContext.Provider value={dispatch}>
-        <SyncContext.Provider value={sync}>{children}</SyncContext.Provider>
+        <SyncContext.Provider value={sync}>
+          <AccountContext.Provider value={accountValue}>{children}</AccountContext.Provider>
+        </SyncContext.Provider>
       </DispatchContext.Provider>
     </StateContext.Provider>
   )
@@ -99,6 +173,12 @@ export function useNow(intervalMs = 30_000): number {
     return () => clearInterval(id)
   }, [intervalMs])
   return now
+}
+
+export function useAccount(): Account {
+  const ctx = useContext(AccountContext)
+  if (!ctx) throw new Error('useAccount must be used inside AppProvider')
+  return ctx
 }
 
 export function useSync(): Sync {

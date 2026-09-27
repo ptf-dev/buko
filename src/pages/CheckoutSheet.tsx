@@ -1,23 +1,45 @@
 import { CreditCard, Loader2, Minus, Plus, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AuthForm } from '../components/AuthForm'
 import { Button } from '../components/Button'
 import { Sheet } from '../components/Sheet'
 import { formatPrice, formatRange } from '../lib/format'
 import type { Listing } from '../lib/search'
 import { MAX_PER_ORDER } from '../state/reducer'
-import { useAppState, useNow, useOrderActions } from '../state/store'
+import { useAccount, useAppState, useNow, useOrderActions, useSync } from '../state/store'
 import type { PaymentMethod } from '../types'
 
-export const PAYMENT_METHODS: { value: PaymentMethod; label: string; detail: string }[] = [
+export const PAYMENT_METHODS: {
+  value: PaymentMethod
+  label: string
+  detail: string
+}[] = [
   { value: 'card', label: 'Card', detail: 'Visa •••• 4242' },
   { value: 'apple-pay', label: 'Apple Pay', detail: 'Pay with Face ID' },
-  { value: 'google-pay', label: 'Google Pay', detail: 'Pay with your Google account' },
+  {
+    value: 'google-pay',
+    label: 'Google Pay',
+    detail: 'Pay with your Google account',
+  },
   { value: 'paypal', label: 'PayPal', detail: 'Log in to PayPal' },
 ]
 
 export function CheckoutSheet({ open, onClose, listing }: { open: boolean; onClose: () => void; listing: Listing }) {
-  return open ? <CheckoutBody onClose={onClose} listing={listing} /> : null
+  const { live } = useSync()
+  const { account } = useAccount()
+  if (!open) return null
+  // Live reservations belong to an account; once signed in the sheet continues to checkout.
+  if (live && !account)
+    return (
+      <Sheet open onClose={onClose} title="Log in to reserve">
+        <p className="mb-4 text-sm text-muted">
+          Your order and pickup code are saved to your account, so you can collect even if you change phone.
+        </p>
+        <AuthForm />
+      </Sheet>
+    )
+  return <CheckoutBody onClose={onClose} listing={listing} />
 }
 
 function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: Listing }) {
@@ -54,20 +76,20 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
       title="Reserve your bag"
       footer={
         <>
-        {error && (
-          <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">
-            {error}
-          </p>
-        )}
-        <Button className="w-full" disabled={!agreed || paying || max <= 0} onClick={pay}>
-          {paying ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" /> Processing…
-            </>
-          ) : (
-            `Pay ${formatPrice(total)}`
+          {error && (
+            <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">
+              {error}
+            </p>
           )}
-        </Button>
+          <Button className="w-full" disabled={!agreed || paying || max <= 0} onClick={pay}>
+            {paying ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" /> Processing…
+              </>
+            ) : (
+              `Pay ${formatPrice(total)}`
+            )}
+          </Button>
         </>
       }
     >
@@ -153,8 +175,8 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
           className="mt-0.5 h-5 w-5 shrink-0 accent-[#00615f]"
         />
         <span className="text-muted">
-          I understand the contents are a surprise and may contain allergens, and that I must collect my order in the
-          pickup window. You can cancel up to 2 hours before pickup for a full refund.
+          I understand the contents are a surprise and may contain allergens, and that I must collect my order in the pickup window. You can
+          cancel up to 2 hours before pickup for a full refund.
         </span>
       </label>
     </Sheet>

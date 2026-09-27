@@ -23,8 +23,8 @@ function corsHeaders(req, path) {
   if (!origin || !NATIVE_ORIGINS.test(origin) || !PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))) return {}
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   }

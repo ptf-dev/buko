@@ -56,6 +56,8 @@ export type Action =
   | { type: 'hydrateStores'; stores: Store[] }
   /** Server copies of this device's orders win over local ones with the same id. */
   | { type: 'upsertOrders'; orders: Order[] }
+  /** Signing out: the orders belonged to the account, not this device. */
+  | { type: 'clearOrders' }
 
 /** Max bags a single customer may reserve per order. */
 export const MAX_PER_ORDER = 4
@@ -143,6 +145,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return initialState()
     case 'hydrateStores':
       return { ...state, stores: action.stores }
+    case 'clearOrders':
+      return { ...state, orders: [] }
     case 'upsertOrders': {
       if (!action.orders.length) return state
       const byId = new Map(state.orders.map((o) => [o.id, o]))

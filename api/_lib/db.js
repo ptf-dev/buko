@@ -108,7 +108,7 @@ create table if not exists users (
   email text not null unique,
   name text not null,
   password_hash text not null,
-  role text not null check (role in ('admin','partner')),
+  role text not null check (role in ('admin','partner','customer')),
   store_id text references stores(id) on delete cascade,
   created_at timestamptz not null default now(),
   last_login_at timestamptz
@@ -161,6 +161,13 @@ export function ensureSchema() {
         await client.query(SCHEMA)
         const { rows } = await client.query('select count(*)::int as n from stores')
         if (rows[0].n === 0) await seedStores(client)
+        // Migrations for databases created before customer accounts existed (safe to re-run).
+        await client.query(`
+          alter table users drop constraint if exists users_role_check;
+          alter table users add constraint users_role_check check (role in ('admin','partner','customer'));
+          alter table orders add column if not exists user_id text references users(id) on delete set null;
+          create index if not exists orders_user_idx on orders (user_id, created_at desc);
+        `)
         // One-off rename: demo reviews seeded before the Buko → Ngopu rebrand.
         await client.query(`update stores set reviews = replace(reviews::text, 'Buko', 'Ngopu')::jsonb where reviews::text like '%Buko%'`)
       } finally {
