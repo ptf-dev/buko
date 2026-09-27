@@ -20,6 +20,16 @@ Rescue delicious unsold food from local stores at a third of the price. Buko is 
 - Validate a customer's pickup code at the counter
 - See reservations, collected bags and revenue
 
+## Website & landing page
+
+Live at **https://buko-five.vercel.app**:
+
+- `/` is the marketing landing page (`landing.html`, `src/landing/`). Its buttons link to the web app, the Android download and the App Store.
+- `/app` is the web app (`index.html`, `src/App.tsx`).
+- `/downloads/buko.apk` is the Android beta download.
+
+`npm run build:web` builds both pages and arranges them for Vercel (`scripts/web-layout.mjs`, `vercel.json`). Store links, the landing URL and the web app URL are set in `src/config.ts`. Until `APP_STORE_URL` / `PLAY_STORE_URL` are filled in, the landing page shows "Coming soon" for iPhone and offers the APK for Android. Screenshots used on the landing page are in `public/landing/`.
+
 ## Tech
 
 React 19, TypeScript, Vite, Tailwind CSS v4, React Router, Leaflet / react-leaflet, lucide-react icons. State lives in a reducer and is saved to `localStorage`. Seed data is in `src/data/stores.ts`: 15 fictional stores in central Tirana, priced in Lek.
@@ -34,6 +44,7 @@ npm run dev       # start dev server
 npm test          # unit tests (vitest)
 npm run lint      # oxlint
 npm run build     # type-check + production build
+npm run build:web # production build laid out for the website (landing + /app)
 ```
 
 ## Native apps (Android & iOS)
@@ -41,8 +52,9 @@ npm run build     # type-check + production build
 The web app is wrapped with [Capacitor](https://capacitorjs.com). The native projects are in `android/` and `ios/`. App id is `al.buko.app`. The native builds use the device's location permission, system share sheet, status bar and a Buko splash screen and icon (sources are in `assets/`).
 
 ```bash
-npm run cap:sync        # build web + copy into native projects (run after every change)
+npm run cap:sync        # build the app + copy into native projects (run after every change)
 npm run android:apk     # build android/app/build/outputs/apk/debug/app-debug.apk
+                        # (copy it to public/downloads/buko.apk to update the website download)
 npm run android:open    # open in Android Studio (run on emulator / device)
 npm run ios:open        # open in Xcode (macOS only)
 ```

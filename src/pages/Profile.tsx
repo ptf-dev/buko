@@ -5,10 +5,10 @@ import { Button, Chip } from '../components/Button'
 import { Toggle } from '../components/FiltersSheet'
 import { PageHeader } from '../components/PageHeader'
 import { Sheet } from '../components/Sheet'
-import { APP_NAME } from '../config'
+import { APP_NAME, LANDING_URL } from '../config'
 import { DIET_LABELS } from '../data/categories'
 import { formatPrice } from '../lib/format'
-import { publicUrl, shareContent } from '../lib/native'
+import { shareContent } from '../lib/native'
 import { computeImpact } from '../state/reducer'
 import { useAppState, useDispatch } from '../state/store'
 import type { Diet } from '../types'
@@ -44,7 +44,7 @@ export function Profile() {
     const result = await shareContent({
       title: APP_NAME,
       text: `Join me on ${APP_NAME} and rescue delicious surplus food at a third of the price!`,
-      url: publicUrl('/'),
+      url: LANDING_URL,
     })
     if (result === 'copied') {
       setInviteCopied(true)

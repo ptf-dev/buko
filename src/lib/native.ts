@@ -6,11 +6,17 @@ import { WEB_URL } from '../config'
 export const isNative = Capacitor.isNativePlatform()
 
 /**
+ * On the website the app is served under /app (the landing page owns /).
+ * The native apps and the dev server serve it from the root.
+ */
+export const ROUTER_BASENAME = !isNative && window.location.pathname.startsWith('/app') ? '/app' : ''
+
+/**
  * Public link to a page. Inside the native app window.location is a local
  * origin, so links are only shareable when WEB_URL is configured.
  */
 export function publicUrl(path: string): string | undefined {
-  if (!isNative) return window.location.origin + path
+  if (!isNative) return window.location.origin + ROUTER_BASENAME + path
   return WEB_URL ? WEB_URL.replace(/\/$/, '') + path : undefined
 }
 

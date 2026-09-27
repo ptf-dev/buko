@@ -10,6 +10,7 @@ import { Orders } from './pages/Orders'
 import { Partner } from './pages/Partner'
 import { Profile } from './pages/Profile'
 import { StoreDetail } from './pages/StoreDetail'
+import { ROUTER_BASENAME } from './lib/native'
 import { AppProvider, useAppState } from './state/store'
 
 /** Routes that show the bottom tab bar. */
@@ -51,7 +52,7 @@ function Shell() {
 export default function App() {
   return (
     <AppProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={ROUTER_BASENAME}>
         <Shell />
       </BrowserRouter>
     </AppProvider>

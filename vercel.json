@@ -1,3 +1,18 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/app", "destination": "/app.html" },
+    { "source": "/app/:path*", "destination": "/app.html" }
+  ],
+  "redirects": [
+    { "source": "/store/:id", "destination": "/app/store/:id" },
+    { "source": "/partner", "destination": "/app/partner" }
+  ],
+  "headers": [
+    {
+      "source": "/downloads/(.*).apk",
+      "headers": [{ "key": "Content-Type", "value": "application/vnd.android.package-archive" }]
+    }
+  ]
 }

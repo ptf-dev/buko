@@ -19,7 +19,17 @@ export const DEFAULT_LOCATION: Location = {
 /** Average CO2e avoided per rescued bag (kg), the figure used across the industry. */
 export const CO2E_PER_BAG_KG = 2.7
 
-/** Public web address, used for share links from the native app. Leave empty to share text only. */
-export const WEB_URL: string = ''
+/** Public address of the web app, used for share links from the native app. Leave empty to share text only. */
+export const WEB_URL: string = 'https://buko-five.vercel.app/app'
+
+/** Marketing site, linked from the invite-a-friend share. */
+export const LANDING_URL = 'https://buko-five.vercel.app'
+
+/** App store listings. Leave empty until the apps are live; the landing page then shows "Coming soon". */
+export const APP_STORE_URL: string = ''
+export const PLAY_STORE_URL: string = ''
+
+/** Direct Android download offered on the landing page while the Play Store listing is pending. */
+export const ANDROID_APK_PATH = '/downloads/buko.apk'
 
 export const RADIUS_OPTIONS_KM = [1, 2, 5, 10, 20]
