@@ -21,6 +21,8 @@ const LIVE_ORDER = "status in ('reserved','collected','no_show')"
 const RATING_TAGS = ['Great value', 'Great quantity', 'Great quality', 'Friendly staff', 'Easy pickup']
 const MAX_PER_ORDER = 4
 const CANCEL_CUTOFF_MS = 2 * 60 * 60_000
+/** Customers can swipe to collect from this long before the pickup window opens (staff can hand over a little early). */
+const EARLY_COLLECT_MS = 15 * 60_000
 
 /* ------------------------------------------------------------------ */
 /* Row mapping                                                         */
@@ -319,6 +321,11 @@ async function cancelOrder({ req, params, body }) {
 /** @type {Handler} */
 async function collectOrder({ req, params, body }) {
   const o = await ownOrder(params.id, await customerContext(req, body.deviceId))
+  const opensAt = new Date(o.pickup_start).getTime() - EARLY_COLLECT_MS
+  if (o.status === 'reserved' && Date.now() < opensAt) {
+    const time = new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, hour: '2-digit', minute: '2-digit' }).format(opensAt)
+    throw new HttpError(409, `Pickup hasn’t opened yet. You can collect from ${time}.`)
+  }
   return { body: { order: toOrder(await markCollected(o.id)) } }
 }
 

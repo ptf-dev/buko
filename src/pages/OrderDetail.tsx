@@ -1,4 +1,4 @@
-import { CalendarPlus, Check, Clock, Leaf, MapPin, MessageSquareWarning, Navigation, PartyPopper, Receipt, Star } from 'lucide-react'
+import { CalendarPlus, Check, Clock, Leaf, Lock, MapPin, MessageSquareWarning, Navigation, PartyPopper, Receipt, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StoreLogo } from '../components/BagArt'
@@ -11,6 +11,11 @@ import { co2eKg, formatPrice, formatRange, isPickupNow, timeUntil } from '../lib
 import { isNative } from '../lib/native'
 import { useAccount, useAppState, useNow, useOrderActions, useSync } from '../state/store'
 import { PAYMENT_METHODS } from './CheckoutSheet'
+
+/** Swipe to collect unlocks this long before the pickup window opens (matches the server). */
+const EARLY_COLLECT_MS = 15 * 60_000
+
+const formatTime = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
 /** Customers can cancel for a full refund until this long before pickup starts. */
 const CANCEL_CUTOFF_MS = 2 * 60 * 60_000
@@ -93,7 +98,7 @@ export function OrderDetail() {
           </div>
           <h2 className="mt-3 text-xl font-bold">Hooray! Your bag is reserved</h2>
           <p className="mt-1 text-sm text-mint">
-            You’re about to save food from going to waste. We’ve sent a receipt to your email.
+            You’re about to save food from going to waste. Your pickup code and receipt are saved below and in Orders.
           </p>
           <button
             type="button"
@@ -177,10 +182,22 @@ export function OrderDetail() {
 
       {order.status === 'reserved' && !missed && (
         <section className="mt-2 bg-white px-4 py-4">
-          <SwipeToConfirm label="Swipe to collect" onConfirm={() => run(() => actions.collect(order.id))} />
-          <p className="mt-2 text-center text-xs text-muted">
-            Only swipe when you’re at the store and staff are handing you your bag.
-          </p>
+          {now >= order.pickupStart - EARLY_COLLECT_MS ? (
+            <>
+              <SwipeToConfirm label="Swipe to collect" onConfirm={() => run(() => actions.collect(order.id))} />
+              <p className="mt-2 text-center text-xs text-muted">Only swipe when you’re at the store and staff are handing you your bag.</p>
+            </>
+          ) : (
+            <div className="flex items-center gap-3 rounded-full bg-cream px-2 py-2" role="status">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-muted shadow-sm">
+                <Lock className="h-5 w-5" aria-hidden />
+              </span>
+              <p className="text-sm">
+                <span className="block font-semibold text-ink">Swipe to collect unlocks at {formatTime(order.pickupStart - EARLY_COLLECT_MS)}</span>
+                <span className="block text-muted">Come to the store during the pickup window.</span>
+              </p>
+            </div>
+          )}
         </section>
       )}
 
@@ -246,7 +263,7 @@ export function OrderDetail() {
         <div className="space-y-1.5">
           <Row label="Order number" value={`#${order.id.toUpperCase()}`} />
           <Row label="Reserved" value={new Date(order.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })} />
-          <Row label="Payment" value={order.paymentMethod === 'cash' ? (order.status === 'collected' ? 'Paid in cash' : 'Cash at pickup') : (payment?.detail ?? order.paymentMethod)} />
+          <Row label="Payment" value={order.paymentMethod === 'cash' ? (order.status === 'collected' ? 'Paid in cash' : 'Cash at pickup') : (payment?.label ?? order.paymentMethod)} />
           <Row label={`${order.quantity} × ${formatPrice(order.unitPrice)}`} value={formatPrice(total)} />
           <Row label="You save" value={formatPrice(saved)} highlight />
         </div>
