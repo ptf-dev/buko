@@ -156,22 +156,39 @@ export function ensureSchema() {
     schemaReady = (async () => {
       const client = await getPool().connect()
       try {
-        // Serialise concurrent cold starts.
-        await client.query('select pg_advisory_lock(4242)')
+        // One transaction with a transaction-scoped lock: safe behind Neon's pooler, released even if we crash,
+        // and the timeouts stop a cold start from hanging on a lock until the function is killed.
+        await client.query('begin')
+        await client.query(`set local lock_timeout = '5s'`)
+        await client.query(`set local statement_timeout = '20s'`)
+        await client.query('select pg_advisory_xact_lock(4242)')
         await client.query(SCHEMA)
         const { rows } = await client.query('select count(*)::int as n from stores')
         if (rows[0].n === 0) await seedStores(client)
-        // Migrations for databases created before customer accounts existed (safe to re-run).
-        await client.query(`
-          alter table users drop constraint if exists users_role_check;
-          alter table users add constraint users_role_check check (role in ('admin','partner','customer'));
-          alter table orders add column if not exists user_id text references users(id) on delete set null;
-          create index if not exists orders_user_idx on orders (user_id, created_at desc);
+        // Migration for databases created before customer accounts existed. Only runs when needed,
+        // because these statements lock the users and orders tables.
+        const { rows: m } = await client.query(`
+          select
+            exists (select 1 from information_schema.columns where table_name = 'orders' and column_name = 'user_id') as has_user_id,
+            coalesce((select pg_get_constraintdef(oid) like '%customer%' from pg_constraint where conname = 'users_role_check'), false) as has_customer_role
         `)
+        if (!m[0].has_customer_role)
+          await client.query(`
+            alter table users drop constraint if exists users_role_check;
+            alter table users add constraint users_role_check check (role in ('admin','partner','customer'));
+          `)
+        if (!m[0].has_user_id)
+          await client.query(`
+            alter table orders add column if not exists user_id text references users(id) on delete set null;
+            create index if not exists orders_user_idx on orders (user_id, created_at desc);
+          `)
         // One-off rename: demo reviews seeded before the Buko → Ngopu rebrand.
         await client.query(`update stores set reviews = replace(reviews::text, 'Buko', 'Ngopu')::jsonb where reviews::text like '%Buko%'`)
+        await client.query('commit')
+      } catch (err) {
+        await client.query('rollback').catch(() => {})
+        throw err
       } finally {
-        await client.query('select pg_advisory_unlock(4242)').catch(() => {})
         client.release()
       }
     })().catch((err) => {
