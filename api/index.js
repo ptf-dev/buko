@@ -69,6 +69,9 @@ export async function handle(req) {
   try {
     const secure = url.protocol === 'https:' || req.headers.get('x-forwarded-proto') === 'https'
     const result = await found.handler({ req, url, params: found.params, body, secure })
+    // Downloads (CSV exports, statements) come back as text with their own content type.
+    if (result.text !== undefined)
+      return new Response(result.text, { status: result.status ?? 200, headers: { 'Cache-Control': 'no-store', ...cors, ...(result.headers ?? {}) } })
     return json(result.body ?? {}, result.status ?? 200, { ...cors, ...(result.headers ?? {}) })
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status, cors)

@@ -2,10 +2,13 @@
 import { createSession, currentUser, destroySession, hashPassword, newId, requireUser, verifyPassword } from './auth.js'
 import { HttpError, query, tx } from './db.js'
 import { resolveWindow, TIMEZONE } from './time.js'
+import { deviceId, email, int, num, oneOf, optStr, password, str } from './validate.js'
+import { COMPLAINT_REASONS, COMPLAINT_WINDOW_HOURS, recordCancellation, recordClose, recordSale } from './finance.js'
+import { FINANCE_ROUTES } from './finance-routes.js'
 
 /**
  * @typedef {{ req: Request, url: URL, params: Record<string, string>, body: any, secure: boolean }} Ctx
- * @typedef {{ status?: number, body?: unknown, headers?: Record<string, string> }} Result
+ * @typedef {{ status?: number, body?: unknown, text?: string, headers?: Record<string, string> }} Result
  * @typedef {(ctx: Ctx) => Promise<Result>} Handler
  */
 
@@ -14,74 +17,6 @@ const PAYMENT_METHODS = ['card', 'apple-pay', 'google-pay', 'paypal']
 const RATING_TAGS = ['Great value', 'Great quantity', 'Great quality', 'Friendly staff', 'Easy pickup']
 const MAX_PER_ORDER = 4
 const CANCEL_CUTOFF_MS = 2 * 60 * 60_000
-
-/* ------------------------------------------------------------------ */
-/* Validation                                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * Required text field.
- * @param {unknown} v @param {string} field @param {{ max?: number, min?: number }} [o]
- * @returns {string}
- */
-function str(v, field, o = {}) {
-  if (v === undefined || v === null || v === '') throw new HttpError(400, `${field} is required.`)
-  if (typeof v !== 'string') throw new HttpError(400, `${field} must be text.`)
-  const s = v.trim()
-  if (s.length < (o.min ?? 1)) throw new HttpError(400, `${field} is too short.`)
-  if (s.length > (o.max ?? 200)) throw new HttpError(400, `${field} is too long.`)
-  return s
-}
-
-/**
- * Optional text field: empty values become null.
- * @param {unknown} v @param {string} field @param {{ max?: number }} [o]
- * @returns {string | null}
- */
-function optStr(v, field, o = {}) {
-  if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return null
-  return str(v, field, o)
-}
-
-/** @param {unknown} v @param {string} field @param {number} min @param {number} max */
-function int(v, field, min, max) {
-  const n = typeof v === 'string' ? Number(v) : v
-  if (typeof n !== 'number' || !Number.isInteger(n) || n < min || n > max)
-    throw new HttpError(400, `${field} must be a whole number between ${min} and ${max}.`)
-  return n
-}
-
-/** @param {unknown} v @param {string} field @param {number} min @param {number} max */
-function num(v, field, min, max) {
-  const n = typeof v === 'string' ? Number(v) : v
-  if (typeof n !== 'number' || !Number.isFinite(n) || n < min || n > max) throw new HttpError(400, `${field} is out of range.`)
-  return n
-}
-
-/** @template T @param {unknown} v @param {string} field @param {readonly T[]} options */
-function oneOf(v, field, options) {
-  if (!options.includes(/** @type {T} */ (v))) throw new HttpError(400, `${field} is not valid.`)
-  return /** @type {T} */ (v)
-}
-
-/** @param {unknown} v */
-function email(v) {
-  const e = str(v, 'Email', { max: 200 }).toLowerCase()
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new HttpError(400, 'Enter a valid email address.')
-  return e
-}
-
-/** @param {unknown} v */
-function password(v) {
-  return str(v, 'Password', { min: 8, max: 200 })
-}
-
-/** @param {unknown} v */
-function deviceId(v) {
-  const d = str(v, 'Device', { min: 8, max: 64 })
-  if (!/^[A-Za-z0-9_-]+$/.test(d)) throw new HttpError(400, 'Device is not valid.')
-  return d
-}
 
 /* ------------------------------------------------------------------ */
 /* Row mapping                                                         */
@@ -153,7 +88,10 @@ function toOrder(r) {
     pickupEnd: new Date(r.pickup_end).getTime(),
     pickupCode: r.pickup_code,
     createdAt: new Date(r.created_at).getTime(),
-    status: r.status,
+    // A no-show is closed on the server; the apps already show a reserved order past its window as "missed".
+    status: r.status === 'no_show' ? 'reserved' : r.status,
+    cancelledBy: r.cancelled_by ?? undefined,
+    complaint: r.complaint_status ? { status: r.complaint_status, refundAmount: r.complaint_refund ?? undefined } : undefined,
     paymentMethod: r.payment_method,
     rating: r.rating ?? undefined,
     ratingTags: r.rating_tags ?? undefined,
@@ -236,6 +174,8 @@ async function createOrder({ req, body }) {
        values ($1,$2,$3,$4,$12,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,'reserved',$11) returning *`,
       [newId(), storeId, bag.id, device, quantity, bag.price, bag.original_price, start, end, pickupCode(), payment, userId],
     )
+    // Payment is simulated for now; the sale is recorded as if the card was charged.
+    await recordSale(c, ins.rows[0])
     return ins.rows[0]
   })
   return { status: 201, body: { order: toOrder(order) } }
@@ -245,7 +185,9 @@ async function createOrder({ req, body }) {
 async function deviceOrders({ req, url }) {
   const { device, userId } = await customerContext(req, url.searchParams.get('deviceId'))
   const { rows } = await query(
-    `select * from orders where (user_id is null and device_id = $1) or ($2::text is not null and user_id = $2) order by created_at desc limit 100`,
+    `select o.*, k.status as complaint_status, k.refund_amount as complaint_refund
+       from orders o left join complaints k on k.order_id = o.id
+      where (o.user_id is null and o.device_id = $1) or ($2::text is not null and o.user_id = $2) order by o.created_at desc limit 100`,
     [device, userId],
   )
   return { body: { orders: rows.map(toOrder) } }
@@ -269,7 +211,11 @@ async function cancelOrder({ req, params, body }) {
     if (new Date(o.pickup_start).getTime() - Date.now() <= CANCEL_CUTOFF_MS)
       throw new HttpError(409, 'Orders can be cancelled up to 2 hours before pickup starts.')
     await c.query('update bags set quantity = quantity + $1, updated_at = now() where store_id = $2', [o.quantity, o.store_id])
-    const up = await c.query(`update orders set status = 'cancelled', cancelled_at = now() where id = $1 returning *`, [o.id])
+    const up = await c.query(
+      `update orders set status = 'cancelled', cancelled_at = now(), closed_at = now(), cancelled_by = 'customer' where id = $1 returning *`,
+      [o.id],
+    )
+    await recordCancellation(c, up.rows[0])
     return up.rows[0]
   })
   return { body: { order: toOrder(order) } }
@@ -278,12 +224,55 @@ async function cancelOrder({ req, params, body }) {
 /** @type {Handler} */
 async function collectOrder({ req, params, body }) {
   const o = await ownOrder(params.id, await customerContext(req, body.deviceId))
-  if (o.status === 'cancelled') throw new HttpError(409, 'This order was cancelled.')
+  return { body: { order: toOrder(await markCollected(o.id)) } }
+}
+
+/**
+ * Marks an order collected (customer swipe or store code check) and charges commission. An order already
+ * closed as a no-show can still be collected late; its money was already settled then.
+ * @param {string} id
+ */
+async function markCollected(id) {
+  return tx(async (c) => {
+    const { rows } = await c.query('select * from orders where id = $1 for update', [id])
+    const o = rows[0]
+    if (o.status === 'cancelled') throw new HttpError(409, 'This order was cancelled.')
+    if (o.status === 'collected') return o
+    const up = await c.query(
+      `update orders set status = 'collected', collected_at = coalesce(collected_at, now()), closed_at = coalesce(closed_at, now()) where id = $1 returning *`,
+      [id],
+    )
+    if (o.status === 'reserved') await recordClose(c, up.rows[0])
+    return up.rows[0]
+  })
+}
+
+/** The customer reports a problem with a collected bag. Support decides in the admin dashboard. */
+/** @type {Handler} */
+async function fileComplaint({ req, params, body }) {
+  const who = await customerContext(req, body.deviceId)
+  if (!who.userId) throw new HttpError(401, 'Log in to report a problem.')
+  const reason = oneOf(body.reason, 'Reason', COMPLAINT_REASONS)
+  const details = optStr(body.details, 'Details', { max: 1000 })
+  const o = await ownOrder(params.id, who)
+  if (o.status !== 'collected') throw new HttpError(409, 'You can report a problem after collecting your bag.')
+  if (Date.now() - new Date(o.collected_at).getTime() > COMPLAINT_WINDOW_HOURS * 3_600_000)
+    throw new HttpError(409, `Problems can be reported up to ${COMPLAINT_WINDOW_HOURS} hours after pickup.`)
+  const exists = await query('select 1 from complaints where order_id = $1', [o.id])
+  if (exists.rows[0]) throw new HttpError(409, 'You already reported a problem with this order.')
+  await query(`insert into complaints (id, order_id, store_id, user_id, reason, details) values ($1,$2,$3,$4,$5,$6)`, [
+    newId('c_'),
+    o.id,
+    o.store_id,
+    who.userId,
+    reason,
+    details,
+  ])
   const { rows } = await query(
-    `update orders set status = 'collected', collected_at = coalesce(collected_at, now()) where id = $1 returning *`,
+    `select o.*, k.status as complaint_status, k.refund_amount as complaint_refund from orders o left join complaints k on k.order_id = o.id where o.id = $1`,
     [o.id],
   )
-  return { body: { order: toOrder(rows[0]) } }
+  return { status: 201, body: { order: toOrder(rows[0]) } }
 }
 
 /** @type {Handler} */
@@ -438,6 +427,7 @@ async function apply({ body, secure }) {
                'Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions.', true)`,
       [storeId, `bag-${storeId}`],
     )
+    await c.query('insert into store_billing (store_id) values ($1)', [storeId])
     await c.query(`insert into users (id, email, name, password_hash, role, store_id) values ($1,$2,$3,$4,'partner',$5)`, [
       userId,
       mail,
@@ -539,7 +529,10 @@ async function partnerOrders({ req, url }) {
   const user = await requireUser(req, 'partner')
   const status = url.searchParams.get('status')
   const { rows } = await query(
-    `select * from orders where store_id = $1 and ($2::text is null or status = $2) order by created_at desc limit 300`,
+    `select o.*, k.status as complaint_status, k.refund_amount as complaint_refund
+       from orders o left join complaints k on k.order_id = o.id
+      where o.store_id = $1 and ($2::text is null or o.status = $2 or ($2 = 'reserved' and o.status = 'no_show'))
+      order by o.created_at desc limit 300`,
     [user.storeId, status && ['reserved', 'collected', 'cancelled'].includes(status) ? status : null],
   )
   return { body: { orders: rows.map(toOrder) } }
@@ -630,8 +623,7 @@ async function partnerValidate({ req, body }) {
   if (!o) throw new HttpError(404, 'No order with that code at your store.')
   if (o.status === 'cancelled') throw new HttpError(409, 'That order was cancelled.')
   if (o.status === 'collected') return { body: { order: toOrder(o), alreadyCollected: true } }
-  const up = await query(`update orders set status = 'collected', collected_at = now() where id = $1 returning *`, [o.id])
-  return { body: { order: toOrder(up.rows[0]), alreadyCollected: false } }
+  return { body: { order: toOrder(await markCollected(o.id)), alreadyCollected: false } }
 }
 
 /* ------------------------------------------------------------------ */
@@ -711,7 +703,7 @@ async function adminOrders({ req, url }) {
   const status = url.searchParams.get('status')
   const { rows } = await query(
     `select o.*, s.name as store_name from orders o join stores s on s.id = o.store_id
-      where ($1::text is null or o.status = $1) order by o.created_at desc limit 500`,
+      where ($1::text is null or o.status = $1 or ($1 = 'reserved' and o.status = 'no_show')) order by o.created_at desc limit 500`,
     [status && ['reserved', 'collected', 'cancelled'].includes(status) ? status : null],
   )
   return { body: { orders: rows.map(toOrder) } }
@@ -816,8 +808,12 @@ async function adminDemo({ req, body }) {
         const status = Math.random() < 0.06 ? 'cancelled' : 'collected'
         const rating = status === 'collected' && Math.random() < 0.5 ? 4 + Math.round(Math.random()) : null
         await query(
-          `insert into orders (id, store_id, bag_id, device_id, quantity, unit_price, unit_original_price, pickup_start, pickup_end, pickup_code, status, payment_method, rating, created_at, collected_at, is_demo)
-           values ($1,$2,$3,$4,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,$11,'card',$12,to_timestamp($13/1000.0),$14,true)`,
+          `insert into orders (id, store_id, bag_id, device_id, quantity, unit_price, unit_original_price, pickup_start, pickup_end, pickup_code, status, payment_method, rating, created_at, collected_at, is_demo,
+                               cancelled_at, closed_at, cancelled_by)
+           values ($1,$2,$3,$4,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,$11,'card',$12,to_timestamp($13/1000.0),$14,true,
+                   case when $11 = 'cancelled' then to_timestamp($13/1000.0) + interval '20 minutes' end,
+                   case when $11 = 'cancelled' then to_timestamp($13/1000.0) + interval '20 minutes' else $14 end,
+                   case when $11 = 'cancelled' then 'customer' end)`,
           [
             newId('d'),
             bag.store_id,
@@ -839,7 +835,28 @@ async function adminDemo({ req, body }) {
       }
     }
   }
+  await demoLedger()
   return { body: { inserted } }
+}
+
+/** Ledger entries for sample orders, back-dated to when each order happened. */
+async function demoLedger() {
+  await tx(async (c) => {
+    const { rows } = await c.query(
+      `select o.* from orders o where o.is_demo and not exists (select 1 from ledger_entries l where l.order_id = o.id) order by o.created_at`,
+    )
+    for (const o of rows) {
+      await recordSale(c, o)
+      if (o.status === 'cancelled') {
+        await recordCancellation(c, o)
+        await c.query(`update ledger_entries set created_at = $2, eligible_at = $2 where order_id = $1`, [o.id, o.closed_at])
+        await c.query(`update ledger_entries set created_at = $2 where order_id = $1 and type = 'sale'`, [o.id, o.created_at])
+      } else if (o.status === 'collected') {
+        await recordClose(c, o)
+        await c.query(`update ledger_entries set created_at = $2 where order_id = $1 and type = 'commission'`, [o.id, o.closed_at])
+      }
+    }
+  })
 }
 
 /* ------------------------------------------------------------------ */
@@ -855,6 +872,7 @@ const ROUTES = [
   ['POST', 'orders/:id/cancel', cancelOrder],
   ['POST', 'orders/:id/collect', collectOrder],
   ['POST', 'orders/:id/rate', rateOrder],
+  ['POST', 'orders/:id/complaint', fileComplaint],
   ['GET', 'auth/me', me],
   ['POST', 'auth/setup', setup],
   ['POST', 'auth/login', login],
@@ -879,6 +897,7 @@ const ROUTES = [
   ['POST', 'admin/stores/:id/users', adminCreateStoreLogin],
   ['POST', 'admin/users/:id/password', adminResetPassword],
   ['POST', 'admin/demo', adminDemo],
+  ...FINANCE_ROUTES,
 ]
 
 /** @param {string} method @param {string} path */

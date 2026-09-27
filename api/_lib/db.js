@@ -147,10 +147,155 @@ create index if not exists orders_device_idx on orders (device_id, created_at de
 create index if not exists sessions_user_idx on sessions (user_id);
 `
 
+/**
+ * Numbered migrations, applied in order on top of SCHEMA (the original tables). Each runs once, inside the
+ * setup transaction, and bumps schema_version. Older databases without schema_version re-run migration 1,
+ * which is written to be safe on a database that already has it.
+ * @type {((c: pg.PoolClient) => Promise<void>)[]}
+ */
+const MIGRATIONS = [
+  // 1: customer accounts.
+  async (c) => {
+    await c.query(`
+      alter table users drop constraint if exists users_role_check;
+      alter table users add constraint users_role_check check (role in ('admin','partner','customer'));
+      alter table orders add column if not exists user_id text references users(id) on delete set null;
+      create index if not exists orders_user_idx on orders (user_id, created_at desc);
+    `)
+    // One-off rename: demo reviews seeded before the Buko → Ngopu rebrand.
+    await c.query(`update stores set reviews = replace(reviews::text, 'Buko', 'Ngopu')::jsonb where reviews::text like '%Buko%'`)
+  },
+  // 2: money: ledger, payouts, billing details, complaints, settings, audit log. See docs/payments-and-reporting.md.
+  async (c) => {
+    await c.query(`
+      alter table orders drop constraint if exists orders_status_check;
+      alter table orders add constraint orders_status_check check (status in ('reserved','collected','cancelled','no_show'));
+      alter table orders add column if not exists cancelled_by text check (cancelled_by in ('customer','store','admin'));
+      alter table orders add column if not exists cancel_reason text;
+      alter table orders add column if not exists closed_at timestamptz;
+      create index if not exists orders_open_idx on orders (pickup_end) where status = 'reserved';
+      update orders set cancelled_by = 'customer' where status = 'cancelled' and cancelled_by is null;
+      update orders set closed_at = case status when 'collected' then coalesce(collected_at, pickup_end) when 'cancelled' then coalesce(cancelled_at, created_at) end
+       where closed_at is null and status in ('collected','cancelled');
+
+      create table platform_settings (
+        key text primary key,
+        value jsonb not null,
+        updated_at timestamptz not null default now()
+      );
+
+      -- Per-store money terms and bank details. Null terms mean "use the platform default".
+      create table store_billing (
+        store_id text primary key references stores(id) on delete cascade,
+        commission_bps integer check (commission_bps between 0 and 10000),
+        commission_min integer check (commission_min >= 0),
+        membership_fee integer check (membership_fee >= 0),
+        membership_paid_until timestamptz,
+        payouts_paused boolean not null default false,
+        legal_name text,
+        nipt text,
+        iban text,
+        bank_verified_at timestamptz,
+        pending_legal_name text,
+        pending_nipt text,
+        pending_iban text,
+        pending_submitted_at timestamptz,
+        updated_at timestamptz not null default now()
+      );
+      insert into store_billing (store_id) select id from stores on conflict do nothing;
+
+      create table payouts (
+        id text primary key,
+        run_id text not null,
+        store_id text not null references stores(id),
+        amount integer not null check (amount > 0),
+        status text not null check (status in ('draft','approved','paid','cancelled')),
+        legal_name text,
+        iban text,
+        bank_reference text,
+        created_by text,
+        approved_by text,
+        approved_at timestamptz,
+        paid_by text,
+        paid_at timestamptz,
+        cancelled_at timestamptz,
+        created_at timestamptz not null default now()
+      );
+      create index payouts_store_idx on payouts (store_id, created_at desc);
+      create index payouts_run_idx on payouts (run_id);
+
+      create table complaints (
+        id text primary key,
+        order_id text not null unique references orders(id) on delete cascade,
+        store_id text not null references stores(id),
+        user_id text references users(id) on delete set null,
+        reason text not null,
+        details text,
+        status text not null default 'open' check (status in ('open','refunded','rejected')),
+        refund_amount integer,
+        funded_by text check (funded_by in ('store','ngopu')),
+        resolution_note text,
+        resolved_by text,
+        resolved_at timestamptz,
+        created_at timestamptz not null default now()
+      );
+      create index complaints_status_idx on complaints (status, created_at desc);
+
+      -- Append-only money ledger, in qindarka (1 L = 100). store_delta changes what Ngopu owes the store,
+      -- platform_delta changes Ngopu's revenue, vat is the VAT included in platform_delta.
+      create table ledger_entries (
+        id bigserial primary key,
+        store_id text not null references stores(id),
+        order_id text references orders(id) on delete cascade,
+        complaint_id text references complaints(id) on delete cascade,
+        payout_id text references payouts(id),
+        type text not null check (type in ('sale','cancellation','commission','commission_reversal','complaint_refund',
+                                           'goodwill_refund','adjustment','membership_fee','payout')),
+        store_delta integer not null default 0,
+        platform_delta integer not null default 0,
+        vat integer not null default 0,
+        eligible_at timestamptz,
+        note text,
+        created_by text,
+        is_demo boolean not null default false,
+        created_at timestamptz not null default now()
+      );
+      create index ledger_store_idx on ledger_entries (store_id, created_at);
+      create index ledger_payout_idx on ledger_entries (payout_id);
+      create index ledger_created_idx on ledger_entries (created_at);
+      create unique index ledger_order_once on ledger_entries (order_id, type) where order_id is not null;
+
+      create table audit_log (
+        id bigserial primary key,
+        actor_id text,
+        action text not null,
+        target text,
+        details jsonb,
+        created_at timestamptz not null default now()
+      );
+      create index audit_created_idx on audit_log (created_at desc);
+    `)
+    // Money history for orders placed before the ledger existed, at the default terms (20%, at least 60 L a bag, 3-day hold).
+    await c.query(`
+      insert into ledger_entries (store_id, order_id, type, store_delta, eligible_at, is_demo, created_at)
+      select store_id, id, 'sale', quantity * unit_price * 100,
+             case status when 'cancelled' then closed_at when 'collected' then closed_at + interval '3 days' end, is_demo, created_at
+        from orders;
+      insert into ledger_entries (store_id, order_id, type, store_delta, eligible_at, is_demo, created_at)
+      select store_id, id, 'cancellation', -quantity * unit_price * 100, closed_at, is_demo, closed_at
+        from orders where status = 'cancelled';
+      insert into ledger_entries (store_id, order_id, type, store_delta, platform_delta, eligible_at, is_demo, created_at)
+      select store_id, id, 'commission', -x.c, x.c, closed_at + interval '3 days', is_demo, closed_at
+        from orders, lateral (select least(quantity * unit_price * 100, greatest(round(quantity * unit_price * 100 * 0.2)::int, 6000 * quantity)) as c) x
+       where status = 'collected';
+    `)
+  },
+]
+
 /** @type {Promise<void> | null} */
 let schemaReady = null
 
-/** Creates tables on first use and seeds the demo stores into an empty database. */
+/** Creates tables on first use, runs pending migrations and seeds the demo stores into an empty database. */
 export function ensureSchema() {
   if (!schemaReady) {
     schemaReady = (async () => {
@@ -165,27 +310,15 @@ export function ensureSchema() {
         // Only the DDL below gets a short lock wait, not the queue for the setup lock above.
         await client.query(`set local lock_timeout = '5s'`)
         await client.query(SCHEMA)
+        await client.query('create table if not exists schema_version (version integer not null)')
+        const { rows: v } = await client.query('select coalesce(max(version), 0)::int as v from schema_version')
+        for (let i = v[0].v; i < MIGRATIONS.length; i++) await MIGRATIONS[i](client)
+        if (v[0].v < MIGRATIONS.length) {
+          await client.query('delete from schema_version')
+          await client.query('insert into schema_version (version) values ($1)', [MIGRATIONS.length])
+        }
         const { rows } = await client.query('select count(*)::int as n from stores')
         if (rows[0].n === 0) await seedStores(client)
-        // Migration for databases created before customer accounts existed. Only runs when needed,
-        // because these statements lock the users and orders tables.
-        const { rows: m } = await client.query(`
-          select
-            exists (select 1 from information_schema.columns where table_name = 'orders' and column_name = 'user_id') as has_user_id,
-            coalesce((select pg_get_constraintdef(oid) like '%customer%' from pg_constraint where conname = 'users_role_check'), false) as has_customer_role
-        `)
-        if (!m[0].has_customer_role)
-          await client.query(`
-            alter table users drop constraint if exists users_role_check;
-            alter table users add constraint users_role_check check (role in ('admin','partner','customer'));
-          `)
-        if (!m[0].has_user_id)
-          await client.query(`
-            alter table orders add column if not exists user_id text references users(id) on delete set null;
-            create index if not exists orders_user_idx on orders (user_id, created_at desc);
-          `)
-        // One-off rename: demo reviews seeded before the Buko → Ngopu rebrand.
-        await client.query(`update stores set reviews = replace(reviews::text, 'Buko', 'Ngopu')::jsonb where reviews::text like '%Buko%'`)
         await client.query('commit')
       } catch (err) {
         await client.query('rollback').catch(() => {})
@@ -202,20 +335,16 @@ export function ensureSchema() {
 }
 
 /**
- * True when every table, index and migration already exists and stores are seeded. This is the
- * normal case, and it takes no locks, so cold starts on a set-up database never queue behind each other.
+ * True when every migration has run and stores are seeded. This is the normal case, and it takes no locks,
+ * so cold starts on a set-up database never queue behind each other.
  */
 async function schemaIsCurrent() {
-  const objects = ['stores', 'bags', 'users', 'sessions', 'orders', 'orders_store_idx', 'orders_device_idx', 'sessions_user_idx', 'orders_user_idx']
-  const { rows } = await getPool().query(
-    `select bool_and(to_regclass('public.' || name) is not null) as tables,
-       coalesce((select pg_get_constraintdef(oid) like '%customer%' from pg_constraint where conname = 'users_role_check'), false) as roles
-     from unnest($1::text[]) as name`,
-    [objects],
+  const { rows } = await getPool().query(`select to_regclass('public.schema_version') is not null as ok`)
+  if (!rows[0].ok) return false
+  const { rows: v } = await getPool().query(
+    'select coalesce(max(version), 0)::int as v, exists (select 1 from stores) as seeded from schema_version',
   )
-  if (!rows[0].tables || !rows[0].roles) return false
-  const { rows: s } = await getPool().query('select exists (select 1 from stores) as seeded')
-  return s[0].seeded
+  return v[0].v >= MIGRATIONS.length && v[0].seeded
 }
 
 /** @param {pg.PoolClient} client */
@@ -233,5 +362,6 @@ async function seedStores(client) {
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [s.id, b.id, b.title, b.description, b.price, b.originalPrice, b.quantity, b.pickup.day, b.pickup.start, b.pickup.end, b.diet ?? null, b.allergensNote, !!b.isNew],
     )
+    await client.query('insert into store_billing (store_id) values ($1) on conflict do nothing', [s.id])
   }
 }
