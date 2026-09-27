@@ -1,6 +1,6 @@
 # Ngopu payments, revenue share & reporting: design
 
-Status: **proposal**. Nothing in here takes real money yet. The app still simulates payment at checkout.
+Status: **Phase 0 built** (September 2026). The ledger, commission, no-shows, complaints, bank details, payouts, reports and exports work end to end. Payment at checkout is still simulated: plugging in POK / Apple Pay is Phase 1.
 Items marked **⚖ Legal/accounting** must be confirmed with an Albanian lawyer and accountant before launch.
 
 ## 1. How Ngopu earns money
@@ -163,6 +163,21 @@ Commission is recorded when the order ends (collected or no-show), not when it's
 | **3** | Promoted placement, chain accounts (many stores under one company, one invoice), optional cash at pickup | Yes |
 
 Phase 0 needs no outside decisions and makes the whole system visible before any real money flows. When the provider contract is signed, Phase 1 is mostly one adapter plus the webhook.
+
+## 9b. What's built (Phase 0)
+
+| Area | Where |
+|---|---|
+| Ledger, commission, no-shows, complaints, payouts, reports | `api/_lib/finance.js` |
+| Finance HTTP endpoints | `api/_lib/finance-routes.js` |
+| Tables (migration 2) | `api/_lib/db.js` |
+| Partner **Earnings** page | `src/dashboard/pages/Earnings.tsx` |
+| Admin **Finance** (overview, payouts, complaints, store billing, settings & exports) and the partner **Money** tab | `src/dashboard/pages/Finance.tsx` |
+| Customer "Report a problem" and store-cancel notice | `src/pages/OrderDetail.tsx` |
+
+Defaults (editable in Finance → Settings): 20% commission, at least 60 L a bag, 6,000 L membership after 12 free months, 3-day hold, 1,000 L minimum payout, payouts every 14 days, no-show 60 min after pickup ends, 48 h hold after new bank details, VAT off.
+
+**Phase 1 hook points:** `recordSale` is called where the order is created. With a real provider, create the order as `pending_payment`, and call `recordSale` from the verified payment webhook. Complaint refunds and cancellations must also call the provider's refund API. The ledger entries stay the same.
 
 ## 10. Decisions needed from you
 

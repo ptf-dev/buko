@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom
 import { AuthProvider, ToastProvider, useAuth, useResource } from './data'
 import { AdminOrders, AdminOverviewPage, AdminPartnerDetail, AdminPartners, AdminTeam } from './pages/Admin'
 import { Apply, Login, NoDatabase, Pending, Setup } from './pages/Auth'
+import { PartnerEarnings } from './pages/Earnings'
+import { AdminBilling, AdminComplaints, AdminFinance, AdminFinanceSettings, AdminPayouts } from './pages/Finance'
 import { PartnerListing, PartnerOrders, PartnerStore, PartnerToday } from './pages/Partner'
 import { adminNav, PARTNER_NAV, Shell } from './Shell'
 import type { AdminOverview } from './types'
@@ -43,7 +45,7 @@ function AdminArea() {
   if (!user) return <Navigate to="/login" replace />
   if (user.role !== 'admin') return <Navigate to="/" replace />
   return (
-    <Shell nav={adminNav(overview.data?.counts.pending ?? 0)} context="Ngopu admin">
+    <Shell nav={adminNav(overview.data?.counts.pending ?? 0, (overview.data?.counts.open_complaints ?? 0) + (overview.data?.counts.pending_bank ?? 0))} context="Ngopu admin">
       <Outlet />
     </Shell>
   )
@@ -72,6 +74,7 @@ function Routed() {
         <Route index element={<PartnerToday />} />
         <Route path="listing" element={<PartnerListing />} />
         <Route path="orders" element={<PartnerOrders />} />
+        <Route path="earnings" element={<PartnerEarnings />} />
         <Route path="store" element={<PartnerStore />} />
       </Route>
       <Route path="/admin" element={<AdminArea />}>
@@ -79,6 +82,11 @@ function Routed() {
         <Route path="partners" element={<AdminPartners />} />
         <Route path="partners/:id" element={<AdminPartnerDetail />} />
         <Route path="orders" element={<AdminOrders />} />
+        <Route path="finance" element={<AdminFinance />} />
+        <Route path="finance/payouts" element={<AdminPayouts />} />
+        <Route path="finance/complaints" element={<AdminComplaints />} />
+        <Route path="finance/stores" element={<AdminBilling />} />
+        <Route path="finance/settings" element={<AdminFinanceSettings />} />
         <Route path="team" element={<AdminTeam />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

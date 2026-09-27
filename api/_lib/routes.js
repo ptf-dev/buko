@@ -91,6 +91,7 @@ function toOrder(r) {
     // A no-show is closed on the server; the apps already show a reserved order past its window as "missed".
     status: r.status === 'no_show' ? 'reserved' : r.status,
     cancelledBy: r.cancelled_by ?? undefined,
+    cancelReason: r.cancelled_by === 'store' ? (r.cancel_reason ?? undefined) : undefined,
     complaint: r.complaint_status ? { status: r.complaint_status, refundAmount: r.complaint_refund ?? undefined } : undefined,
     paymentMethod: r.payment_method,
     rating: r.rating ?? undefined,
@@ -642,7 +643,9 @@ async function adminOverview({ req, url }) {
              count(*) filter (where status = 'pending')::int as pending,
              count(*) filter (where status = 'suspended')::int as suspended,
              (select coalesce(sum(b.quantity), 0)::int from bags b join stores s on s.id = b.store_id where s.status = 'active' and not b.paused) as bags_live,
-             (select count(*)::int from orders where status = 'reserved' and pickup_end >= now()) as to_collect
+             (select count(*)::int from orders where status = 'reserved' and pickup_end >= now()) as to_collect,
+             (select count(*)::int from complaints where status = 'open') as open_complaints,
+             (select count(*)::int from store_billing where pending_iban is not null) as pending_bank
            from stores`),
     query(
       `select s.id, s.name, s.branch, s.category, s.rating,

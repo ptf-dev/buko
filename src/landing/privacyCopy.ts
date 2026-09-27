@@ -38,6 +38,7 @@ const sq: { title: string; intro: string; updated: string; back: string; content
         'Një identifikues i rastësishëm i pajisjes, i krijuar nga aplikacioni. Nuk përmban numrin e telefonit apo ndonjë ID të pajisjes nga prodhuesi.',
         'Porosia: dyqani, çanta, sasia, çmimi, orari i marrjes, kodi i marrjes, mënyra e pagesës që zgjodhe (p.sh. „kartë”) dhe statusi (e rezervuar, e marrë, e anuluar).',
         'Vlerësimi që i jep çantës (1–5 yje dhe etiketat që zgjedh), nëse vendos ta japësh.',
+        'Një ankesë që dërgon për një çantë (arsyeja dhe përshkrimi yt), si dhe vendimi dhe rimbursimi. Dyqani sheh ankesën, por jo emailin tënd.',
       ],
       after: [
         'Këto qëndrojnë vetëm në pajisjen tënde dhe nuk dërgohen te ne: preferencat e dietës, të preferuarat dhe zona që zgjedh.',
@@ -53,6 +54,7 @@ const sq: { title: string; intro: string; updated: string; back: string; content
         'Emrin e personit të kontaktit, emailin, numrin e telefonit (opsional) dhe mesazhin e aplikimit.',
         'Të dhënat e dyqanit: emrin, llojin, adresën, vendndodhjen në hartë dhe informacionin e Çantës Surprizë. Këto shfaqen publikisht në aplikacion pasi dyqani miratohet.',
         'Fjalëkalimin, vetëm në formë të enkriptuar në mënyrë të pakthyeshme (scrypt). Ne nuk e shohim dot fjalëkalimin tënd.',
+        'Të dhënat për pagesat: emrin ligjor të biznesit, NIPT-in dhe IBAN-in, shitjet, komisionet, pagesat e bëra dhe faturat, të cilat ruhen sa kërkon ligji për kontabilitetin.',
         'Kohën e hyrjeve të fundit dhe një cookie sesioni që të mban të kyçur.',
       ],
     },
@@ -156,6 +158,7 @@ const en: typeof sq = {
         'A random device identifier created by the app. It contains no phone number or manufacturer device ID.',
         'The order: store, bag, quantity, price, pickup window, pickup code, the payment method you chose (e.g. “card”) and its status (reserved, collected, cancelled).',
         'The rating you give the bag (1–5 stars and the tags you pick), if you choose to rate it.',
+        'A complaint you send about a bag (the reason and your description), and the decision and any refund. The store sees the complaint, not your email.',
       ],
       after: [
         'These stay only on your device and are not sent to us: diet preferences, favourites and the area you choose.',
@@ -171,6 +174,7 @@ const en: typeof sq = {
         'The contact person’s name, email, phone number (optional) and application message.',
         'Store details: name, type, address, map location and Surprise Bag information. These are shown publicly in the app once the store is approved.',
         'The password, only as a one-way hash (scrypt). We can’t see your password.',
+        'Payout details: the business’s legal name, NIPT and IBAN, plus sales, commission, payouts and invoices, kept as long as accounting law requires.',
         'Recent login times and a session cookie that keeps you signed in.',
       ],
     },

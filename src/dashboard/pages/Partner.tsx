@@ -11,7 +11,7 @@ import { useNow } from '../../state/store'
 import { BarChart, shortDay } from '../BarChart'
 import { useResource, useToast } from '../data'
 import type { DashOrder, ManagedStore, PartnerOverview } from '../types'
-import { Btn, DataTable, Delta, Empty, ErrorState, Field, Input, Kpi, OrderBadge, PageSkeleton, PageTitle, Panel, Segmented, Select, StatusBadge, Switch, TextArea, type Column } from '../ui'
+import { Btn, DataTable, Delta, Dialog, Empty, ErrorState, Field, Input, Kpi, OrderBadge, PageSkeleton, PageTitle, Panel, Segmented, Select, StatusBadge, Switch, TextArea, type Column } from '../ui'
 
 function greeting() {
   const h = new Date().getHours()
@@ -457,6 +457,7 @@ type OrderFilter = 'reserved' | 'collected' | 'cancelled' | 'all'
 
 export function PartnerOrders() {
   const [filter, setFilter] = useState<OrderFilter>('reserved')
+  const [cancelling, setCancelling] = useState<DashOrder | null>(null)
   const { data, error, loading, reload } = useResource<{ orders: DashOrder[] }>('partner/orders', 30_000)
   const now = useNow(15_000)
   const orders = data?.orders ?? []
@@ -474,7 +475,17 @@ export function PartnerOrders() {
       sort: (o) => o.createdAt,
       render: (o) => <span className="text-muted">{new Date(o.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span>,
     },
-    { key: 'status', header: 'Status', render: (o) => <OrderBadge status={orderState(o, now)} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (o) => (
+        <span className="inline-flex items-center gap-1.5">
+          <OrderBadge status={orderState(o, now)} />
+          {o.cancelledBy === 'store' && <span className="text-xs text-muted">by you</span>}
+          {o.complaint && <span className="text-xs font-medium text-[#a1261a]">complaint</span>}
+        </span>
+      ),
+    },
     {
       key: 'rating',
       header: 'Rating',
@@ -488,11 +499,32 @@ export function PartnerOrders() {
           <span className="text-muted">—</span>
         ),
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (o) =>
+        orderState(o, now) === 'reserved' ? (
+          <Btn size="sm" variant="quiet-danger" onClick={() => setCancelling(o)}>
+            Can’t honour
+          </Btn>
+        ) : null,
+    },
   ]
 
   return (
     <>
       <PageTitle title="Orders" subtitle="Every reservation for your store. Refreshes every 30 seconds." />
+      {cancelling && (
+        <CancelOrderDialog
+          order={cancelling}
+          onClose={() => setCancelling(null)}
+          onDone={() => {
+            setCancelling(null)
+            reload()
+          }}
+        />
+      )}
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <Panel
           title={
@@ -533,6 +565,58 @@ export function PartnerOrders() {
         </Panel>
       </div>
     </>
+  )
+}
+
+const CANCEL_REASONS = ['We closed early today', 'We ran out of food', 'Something else']
+
+/** The store can't honour a reservation: the customer gets a full refund and is told why. */
+function CancelOrderDialog({ order, onClose, onDone }: { order: DashOrder; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [reason, setReason] = useState(CANCEL_REASONS[0]!)
+  const [other, setOther] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await api(`partner/orders/${order.id}/cancel`, { method: 'POST', json: { reason: reason === 'Something else' ? other : reason } })
+      toast('Order cancelled. The customer gets a full refund.')
+      onDone()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not cancel.', 'error')
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog title={`Cancel order ${order.pickupCode}?`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-[15px] text-muted">
+          The customer gets a full refund of {formatPrice(order.unitPrice * order.quantity)} and no commission is charged. Frequent cancellations are reviewed by
+          Ngopu, because customers rely on their reservation.
+        </p>
+        <Field label="Why?">
+          {(id) => (
+            <Select id={id} value={reason} onChange={(e) => setReason(e.target.value)}>
+              {CANCEL_REASONS.map((r) => (
+                <option key={r}>{r}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        {reason === 'Something else' && (
+          <Field label="Tell the customer what happened">{(id) => <TextArea id={id} value={other} onChange={(e) => setOther(e.target.value)} required />}</Field>
+        )}
+        <div className="flex gap-2">
+          <Btn type="submit" variant="danger" loading={busy} disabled={reason === 'Something else' && !other.trim()}>
+            Cancel and refund
+          </Btn>
+          <Btn variant="ghost" onClick={onClose}>
+            Keep order
+          </Btn>
+        </div>
+      </form>
+    </Dialog>
   )
 }
 

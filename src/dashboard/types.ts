@@ -55,7 +55,7 @@ export interface AdminOverview {
   days: number
   series: DayPoint[]
   totals: Totals
-  counts: { active: number; pending: number; suspended: number; bags_live: number; to_collect: number }
+  counts: { active: number; pending: number; suspended: number; bags_live: number; to_collect: number; open_complaints: number; pending_bank: number }
   topStores: { id: string; name: string; branch: string | null; category: string; rating: number; bags: number; revenue: number }[]
 }
 

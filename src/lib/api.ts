@@ -91,6 +91,8 @@ export const customerApi = {
     ),
   cancel: (id: string) => customer<{ order: Order }>(`orders/${id}/cancel`, { method: 'POST', json: { deviceId: deviceId() } }).then((r) => r.order),
   collect: (id: string) => customer<{ order: Order }>(`orders/${id}/collect`, { method: 'POST', json: { deviceId: deviceId() } }).then((r) => r.order),
+  complain: (id: string, reason: string, details: string) =>
+    customer<{ order: Order }>(`orders/${id}/complaint`, { method: 'POST', json: { deviceId: deviceId(), reason, details } }).then((r) => r.order),
   rate: (id: string, rating: number, tags: string[]) =>
     customer<{ order: Order }>(`orders/${id}/rate`, { method: 'POST', json: { deviceId: deviceId(), rating, tags } }).then((r) => r.order),
 

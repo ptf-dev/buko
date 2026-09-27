@@ -218,6 +218,11 @@ export function useOrderActions() {
         if (!live) return dispatch({ type: 'collectOrder', orderId, now: Date.now() })
         save(await customerApi.collect(orderId))
       },
+      /** Report a problem with a collected bag. Needs the server: support decides refunds. */
+      async complain(orderId: string, reason: string, details: string) {
+        if (!live) throw new Error('Reporting a problem needs an internet connection.')
+        save(await customerApi.complain(orderId, reason, details))
+      },
       async rate(orderId: string, rating: number, tags: string[]) {
         if (!live) return dispatch({ type: 'rateOrder', orderId, rating, tags })
         save(await customerApi.rate(orderId, rating, tags))

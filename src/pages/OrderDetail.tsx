@@ -1,4 +1,4 @@
-import { CalendarPlus, Check, Clock, Leaf, MapPin, Navigation, PartyPopper, Receipt, Star } from 'lucide-react'
+import { CalendarPlus, Check, Clock, Leaf, MapPin, MessageSquareWarning, Navigation, PartyPopper, Receipt, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StoreLogo } from '../components/BagArt'
@@ -9,7 +9,7 @@ import { SwipeToConfirm } from '../components/SwipeToConfirm'
 import { RATING_TAGS } from '../data/categories'
 import { co2eKg, formatPrice, formatRange, isPickupNow, timeUntil } from '../lib/format'
 import { isNative } from '../lib/native'
-import { useAppState, useNow, useOrderActions, useSync } from '../state/store'
+import { useAccount, useAppState, useNow, useOrderActions, useSync } from '../state/store'
 import { PAYMENT_METHODS } from './CheckoutSheet'
 
 /** Customers can cancel for a full refund until this long before pickup starts. */
@@ -148,7 +148,11 @@ export function OrderDetail() {
         )}
         {order.status === 'cancelled' && (
           <p className="mt-4 rounded-2xl bg-line p-4 text-sm font-medium">
-            This order was cancelled and {formatPrice(total)} has been refunded to your {payment?.label ?? 'payment method'}.
+            {order.cancelledBy === 'store'
+              ? `${store.name} had to cancel this order${order.cancelReason ? `: “${order.cancelReason}”` : ''}. We’re sorry. `
+              : 'This order was cancelled and '}
+            {order.cancelledBy === 'store' ? `${formatPrice(total)} is refunded` : `${formatPrice(total)} has been refunded`} to your{' '}
+            {payment?.label ?? 'payment method'}.
           </p>
         )}
         {missed && (
@@ -208,6 +212,8 @@ export function OrderDetail() {
           )}
         </section>
       )}
+
+      {order.status === 'collected' && <ProblemReport order={order} storeName={store.name} />}
 
       <section className="mt-2 space-y-3 bg-white px-4 py-4 text-sm">
         <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3">
@@ -286,5 +292,105 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
       <span className="text-muted">{label}</span>
       <span className={highlight ? 'font-semibold text-brand' : 'font-medium'}>{value}</span>
     </div>
+  )
+}
+
+/** Hours after pickup during which a problem can be reported (matches the server). */
+const COMPLAINT_WINDOW_MS = 24 * 60 * 60_000
+
+const PROBLEMS: { value: string; label: string }[] = [
+  { value: 'quality', label: 'The food wasn’t good' },
+  { value: 'quantity', label: 'Too little food for the price' },
+  { value: 'wrong_items', label: 'Not what the bag described' },
+  { value: 'store_closed', label: 'The store was closed or had no bag' },
+  { value: 'staff', label: 'Problem with staff or pickup' },
+  { value: 'other', label: 'Something else' },
+]
+
+function ProblemReport({ order, storeName }: { order: import('../types').Order; storeName: string }) {
+  const { live } = useSync()
+  const { account } = useAccount()
+  const actions = useOrderActions()
+  const now = useNow(60_000)
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [details, setDetails] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  if (order.complaint) {
+    const k = order.complaint
+    return (
+      <section className="mt-2 flex gap-3 bg-white px-4 py-4 text-sm">
+        <MessageSquareWarning className="h-5 w-5 shrink-0 text-muted" aria-hidden />
+        <p>
+          {k.status === 'open' && 'Thanks for telling us. Our team is looking into it and will get back to you within a working day.'}
+          {k.status === 'refunded' && `We’ve refunded ${formatPrice((k.refundAmount ?? 0) / 100)} to your payment method. Sorry about this bag.`}
+          {k.status === 'rejected' && 'We looked into your report and couldn’t offer a refund this time. Contact support if you have questions.'}
+        </p>
+      </section>
+    )
+  }
+  const collectedAt = order.collectedAt ?? order.pickupEnd
+  if (!live || !account || now - collectedAt > COMPLAINT_WINDOW_MS) return null
+
+  const submit = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await actions.complain(order.id, reason, details)
+      setOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="mt-2 bg-white px-4 py-3">
+      <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-3 py-1 text-left text-sm font-medium">
+        <MessageSquareWarning className="h-5 w-5 text-muted" aria-hidden />
+        <span className="flex-1">Something wrong with your bag?</span>
+        <span className="text-brand">Report a problem</span>
+      </button>
+      <Sheet
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Report a problem"
+        footer={
+          <>
+            {error && (
+              <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">
+                {error}
+              </p>
+            )}
+            <Button className="w-full" disabled={!reason || busy} onClick={submit}>
+              {busy ? 'Sending…' : 'Send to Ngopu'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">Tell us what went wrong with your bag from {storeName}. You can report a problem up to 24 hours after pickup.</p>
+        <div className="mt-4 space-y-2" role="radiogroup" aria-label="What went wrong?">
+          {PROBLEMS.map((p) => (
+            <label key={p.value} className={`flex cursor-pointer items-center gap-3 rounded-xl p-3 ring-1 ${reason === p.value ? 'bg-brand-light ring-brand' : 'ring-line'}`}>
+              <input type="radio" name="problem" value={p.value} checked={reason === p.value} onChange={() => setReason(p.value)} className="accent-[#00615f]" />
+              <span className="text-sm font-medium">{p.label}</span>
+            </label>
+          ))}
+        </div>
+        <label className="mt-4 block text-sm font-semibold">
+          Details <span className="font-normal text-muted">(optional)</span>
+          <textarea
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
+            rows={3}
+            maxLength={1000}
+            className="mt-1.5 w-full rounded-xl bg-cream px-3 py-2.5 text-base font-normal outline-none focus:ring-2 focus:ring-brand"
+          />
+        </label>
+      </Sheet>
+    </section>
   )
 }

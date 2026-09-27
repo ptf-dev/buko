@@ -1,12 +1,13 @@
 import { ArrowLeft, ClipboardList, Database, Inbox, Mail, Phone, Search, Star, Store, UserPlus } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StoreLogo } from '../../components/BagArt'
 import { CATEGORIES } from '../../data/categories'
 import { api } from '../../lib/api'
 import { formatPrice, formatRange } from '../../lib/format'
 import type { Category } from '../../types'
 import { useNow } from '../../state/store'
+import { StoreMoneyPanel } from './Finance'
 import { BarChart, shortDay } from '../BarChart'
 import { useAuth, useResource, useToast } from '../data'
 import type { AdminMember, AdminOverview, AdminStoreDetail, DashOrder, ManagedStore, StoreStatus } from '../types'
@@ -298,7 +299,8 @@ export function AdminPartnerDetail() {
   const { id } = useParams()
   const { data, error, loading, reload, setData } = useResource<AdminStoreDetail>(`admin/stores/${id}`)
   const toast = useToast()
-  const [tab, setTab] = useState<'performance' | 'listing' | 'profile'>('performance')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<'performance' | 'money' | 'listing' | 'profile'>(params.get('tab') === 'money' ? 'money' : 'performance')
   const now = useNow(30_000)
 
   if (loading) return <PageSkeleton />
@@ -394,6 +396,7 @@ export function AdminPartnerDetail() {
           onChange={setTab}
           options={[
             { value: 'performance', label: 'Performance' },
+            { value: 'money', label: 'Money' },
             { value: 'listing', label: 'Surprise Bag' },
             { value: 'profile', label: 'Profile & contact' },
           ]}
@@ -452,6 +455,8 @@ export function AdminPartnerDetail() {
           </Panel>
         </>
       )}
+
+      {tab === 'money' && <StoreMoneyPanel storeId={store.id} />}
 
       {tab === 'listing' && <BagEditor store={store} save={(bag) => patch({ bag })} onSaved={(s) => setData({ ...data, store: s })} />}
       {tab === 'profile' && <StoreProfileForm store={store} save={patch} onSaved={(s) => setData({ ...data, store: s })} />}

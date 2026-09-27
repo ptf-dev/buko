@@ -62,6 +62,12 @@ export interface Order {
   pickupCode: string
   createdAt: number
   status: OrderStatus
+  /** Set by the server when an order is cancelled. */
+  cancelledBy?: 'customer' | 'store' | 'admin'
+  /** Shown to the customer when the store cancelled. */
+  cancelReason?: string
+  /** A problem the customer reported after pickup. Amounts in qindarka (1 L = 100). */
+  complaint?: { status: 'open' | 'refunded' | 'rejected'; refundAmount?: number }
   paymentMethod: PaymentMethod
   rating?: number
   ratingTags?: string[]

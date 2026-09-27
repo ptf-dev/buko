@@ -1,4 +1,4 @@
-import { ClipboardList, ExternalLink, LayoutGrid, LogOut, Package, Store, Users, type LucideIcon } from 'lucide-react'
+import { Banknote, ClipboardList, ExternalLink, LayoutGrid, LogOut, Package, Store, Users, Wallet, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from './data'
@@ -17,14 +17,16 @@ export const PARTNER_NAV: NavItem[] = [
   { to: '/partner', label: 'Today', short: 'Today', icon: LayoutGrid, end: true },
   { to: '/partner/listing', label: 'Surprise Bag', short: 'Bag', icon: Package },
   { to: '/partner/orders', label: 'Orders', short: 'Orders', icon: ClipboardList },
+  { to: '/partner/earnings', label: 'Earnings', short: 'Earnings', icon: Wallet },
   { to: '/partner/store', label: 'Store profile', short: 'Store', icon: Store },
 ]
 
-export function adminNav(pending: number): NavItem[] {
+export function adminNav(pending: number, financeTodo = 0): NavItem[] {
   return [
     { to: '/admin', label: 'Overview', short: 'Overview', icon: LayoutGrid, end: true },
     { to: '/admin/partners', label: 'Partners', short: 'Partners', icon: Store, badge: pending },
     { to: '/admin/orders', label: 'Orders', short: 'Orders', icon: ClipboardList },
+    { to: '/admin/finance', label: 'Finance', short: 'Finance', icon: Banknote, badge: financeTodo },
     { to: '/admin/team', label: 'Team & settings', short: 'Team', icon: Users },
   ]
 }

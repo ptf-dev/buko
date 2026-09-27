@@ -1,5 +1,5 @@
-import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Loader2, Minus } from 'lucide-react'
-import { useId, useMemo, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Loader2, Minus, X } from 'lucide-react'
+import { useEffect, useId, useMemo, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import type { StoreStatus } from './types'
 
 /* Buttons ----------------------------------------------------------------- */
@@ -408,5 +408,74 @@ export function Segmented<T extends string>({ value, onChange, options, label }:
         </button>
       ))}
     </div>
+  )
+}
+
+/* Money badges ------------------------------------------------------------ */
+
+const TONES = {
+  neutral: 'bg-[#eceeed] text-[#5b6765]',
+  info: 'bg-brand-light text-brand-dark',
+  good: 'bg-[#e1f3ec] text-[#0b6b4f]',
+  warn: 'bg-[#fff1cc] text-[#7a5400]',
+  bad: 'bg-[#fde4e1] text-[#a1261a]',
+} as const
+
+/** Small status pill with a text label (never colour alone). */
+export function Pill({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
+  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${TONES[tone]}`}>{children}</span>
+}
+
+const PAYOUT_TONE = { draft: ['warn', 'Draft'], approved: ['info', 'Approved'], paid: ['good', 'Paid'], cancelled: ['neutral', 'Cancelled'] } as const
+export function PayoutBadge({ status }: { status: keyof typeof PAYOUT_TONE }) {
+  const [tone, label] = PAYOUT_TONE[status]
+  return <Pill tone={tone}>{label}</Pill>
+}
+
+const COMPLAINT_TONE = { open: ['warn', 'Open'], refunded: ['good', 'Refunded'], rejected: ['neutral', 'Rejected'] } as const
+export function ComplaintBadge({ status }: { status: keyof typeof COMPLAINT_TONE }) {
+  const [tone, label] = COMPLAINT_TONE[status]
+  return <Pill tone={tone}>{label}</Pill>
+}
+
+/* Dialog ------------------------------------------------------------------ */
+
+/** Centred modal for short forms. Escape or the backdrop closes it. */
+export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const id = useId()
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby={id}>
+      <div className="absolute inset-0 bg-ink/40" onClick={onClose} />
+      <div className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <h2 id={id} className="text-lg font-bold">
+            {title}
+          </h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="-m-1 rounded-lg p-1 text-muted hover:bg-cream hover:text-ink">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** Label/value rows for summaries (e.g. an earnings breakdown). */
+export function Breakdown({ rows }: { rows: { label: ReactNode; value: ReactNode; strong?: boolean; muted?: boolean }[] }) {
+  return (
+    <dl className="divide-y divide-line/70 text-[15px]">
+      {rows.map((r, i) => (
+        <div key={i} className={`flex items-baseline justify-between gap-4 py-2.5 ${r.strong ? 'font-bold' : ''}`}>
+          <dt className={r.muted ? 'text-muted' : ''}>{r.label}</dt>
+          <dd className={`shrink-0 text-right whitespace-nowrap tabular-nums ${r.muted ? 'text-muted' : ''}`}>{r.value}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
