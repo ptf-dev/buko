@@ -36,8 +36,23 @@ npm run lint      # oxlint
 npm run build     # type-check + production build
 ```
 
+## Native apps (Android & iOS)
+
+The web app is wrapped with [Capacitor](https://capacitorjs.com). The native projects are in `android/` and `ios/`. App id is `al.buko.app`. The native builds use the device's location permission, system share sheet, status bar and a Buko splash screen and icon (sources are in `assets/`).
+
+```bash
+npm run cap:sync        # build web + copy into native projects (run after every change)
+npm run android:apk     # build android/app/build/outputs/apk/debug/app-debug.apk
+npm run android:open    # open in Android Studio (run on emulator / device)
+npm run ios:open        # open in Xcode (macOS only)
+```
+
+Android needs JDK 21 and the Android SDK (platform 36). iOS needs macOS with Xcode. To regenerate icons and splash screens after changing `assets/`, run `npx @capacitor/assets generate`.
+
+To make share links from the app open the web version, set `WEB_URL` in `src/config.ts` once the site is deployed.
+
 ## Next steps for production
 
 - Backend and API for stores, inventory and orders (replace `SEED_STORES` and the localStorage reducer)
 - Real authentication and payments (e.g. Stripe), with email receipts
-- Store photos, push notifications for favourites, and a native wrapper (Capacitor / Expo) for the app stores
+- Store photos, push notifications for favourites, and signed release builds for Google Play and the App Store

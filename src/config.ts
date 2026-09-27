@@ -19,4 +19,7 @@ export const DEFAULT_LOCATION: Location = {
 /** Average CO2e avoided per rescued bag (kg), the figure used across the industry. */
 export const CO2E_PER_BAG_KG = 2.7
 
+/** Public web address, used for share links from the native app. Leave empty to share text only. */
+export const WEB_URL: string = ''
+
 export const RADIUS_OPTIONS_KM = [1, 2, 5, 10, 20]

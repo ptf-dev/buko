@@ -20,6 +20,7 @@ import { MapView } from '../components/LazyMap'
 import { EmptyState } from '../components/PageHeader'
 import { CATEGORIES, DIET_LABELS } from '../data/categories'
 import { discountPercent, formatDistance, formatPrice, formatRange, isPickupNow, timeUntil } from '../lib/format'
+import { publicUrl, shareContent } from '../lib/native'
 import { useAppState, useNow } from '../state/store'
 import { useListings } from '../state/useListings'
 import { CheckoutSheet } from './CheckoutSheet'
@@ -53,16 +54,14 @@ export function StoreDetail() {
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${store.lat},${store.lng}`
 
   const share = async () => {
-    const url = window.location.href
-    try {
-      if (navigator.share) await navigator.share({ title: store.name, text: `${bag.title} at ${store.name} on Buko`, url })
-      else {
-        await navigator.clipboard.writeText(url)
-        setShared(true)
-        setTimeout(() => setShared(false), 2000)
-      }
-    } catch {
-      // User cancelled share sheet.
+    const result = await shareContent({
+      title: store.name,
+      text: `${bag.title} at ${store.name} on Buko`,
+      url: publicUrl(`/store/${store.id}`),
+    })
+    if (result === 'copied') {
+      setShared(true)
+      setTimeout(() => setShared(false), 2000)
     }
   }
 

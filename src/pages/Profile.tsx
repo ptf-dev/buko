@@ -8,6 +8,7 @@ import { Sheet } from '../components/Sheet'
 import { APP_NAME } from '../config'
 import { DIET_LABELS } from '../data/categories'
 import { formatPrice } from '../lib/format'
+import { publicUrl, shareContent } from '../lib/native'
 import { computeImpact } from '../state/reducer'
 import { useAppState, useDispatch } from '../state/store'
 import type { Diet } from '../types'
@@ -40,16 +41,14 @@ export function Profile() {
   const [inviteCopied, setInviteCopied] = useState(false)
 
   const invite = async () => {
-    const text = `Join me on ${APP_NAME} and rescue delicious surplus food at a third of the price! ${window.location.origin}`
-    try {
-      if (navigator.share) await navigator.share({ title: APP_NAME, text })
-      else {
-        await navigator.clipboard.writeText(text)
-        setInviteCopied(true)
-        setTimeout(() => setInviteCopied(false), 2000)
-      }
-    } catch {
-      // Cancelled.
+    const result = await shareContent({
+      title: APP_NAME,
+      text: `Join me on ${APP_NAME} and rescue delicious surplus food at a third of the price!`,
+      url: publicUrl('/'),
+    })
+    if (result === 'copied') {
+      setInviteCopied(true)
+      setTimeout(() => setInviteCopied(false), 2000)
     }
   }
 

@@ -8,6 +8,7 @@ import { Sheet } from '../components/Sheet'
 import { SwipeToConfirm } from '../components/SwipeToConfirm'
 import { RATING_TAGS } from '../data/categories'
 import { co2eKg, formatPrice, formatRange, isPickupNow, timeUntil } from '../lib/format'
+import { isNative } from '../lib/native'
 import { useAppState, useDispatch, useNow } from '../state/store'
 import { PAYMENT_METHODS } from './CheckoutSheet'
 
@@ -198,7 +199,7 @@ export function OrderDetail() {
           <span className="flex-1">{store.address}</span>
           <Navigation className="h-5 w-5 text-brand" />
         </a>
-        {order.status === 'reserved' && !missed && (
+        {order.status === 'reserved' && !missed && !isNative && (
           <a href={calendarHref} download={`buko-${order.pickupCode}.ics`} className="flex items-center gap-3 font-medium text-brand">
             <CalendarPlus className="h-5 w-5" /> Add pickup to calendar
           </a>

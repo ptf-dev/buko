@@ -2,6 +2,7 @@ import { LocateFixed, MapPin } from 'lucide-react'
 import { useState } from 'react'
 import { DEFAULT_LOCATION, RADIUS_OPTIONS_KM } from '../config'
 import { useAppState, useDispatch } from '../state/store'
+import { currentPosition } from '../lib/native'
 import type { Location } from '../types'
 import { Button, Chip } from './Button'
 import { Sheet } from './Sheet'
@@ -17,19 +18,13 @@ const PLACES: Location[] = [
 export function useGeolocation() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const locate = (onSuccess: (lat: number, lng: number) => void) => {
-    if (!('geolocation' in navigator)) {
-      setStatus('error')
-      return
-    }
     setStatus('loading')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    currentPosition()
+      .then(({ lat, lng }) => {
         setStatus('idle')
-        onSuccess(pos.coords.latitude, pos.coords.longitude)
-      },
-      () => setStatus('error'),
-      { timeout: 10_000 },
-    )
+        onSuccess(lat, lng)
+      })
+      .catch(() => setStatus('error'))
   }
   return { status, locate }
 }

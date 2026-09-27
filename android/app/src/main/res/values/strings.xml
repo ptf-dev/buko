@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Buko</string>
+    <string name="title_activity_main">Buko</string>
+    <string name="package_name">al.buko.app</string>
+    <string name="custom_url_scheme">al.buko.app</string>
+</resources>
