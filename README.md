@@ -47,7 +47,7 @@ npm run android:open    # open in Android Studio (run on emulator / device)
 npm run ios:open        # open in Xcode (macOS only)
 ```
 
-Android needs JDK 21 and the Android SDK (platform 36). iOS needs macOS with Xcode. To regenerate icons and splash screens after changing `assets/`, run `npx @capacitor/assets generate`.
+The project needs Node.js 22.12 or newer. Android needs JDK 21 and the Android SDK (platform 36). iOS needs macOS with Xcode. To regenerate icons and splash screens after changing `assets/`, run `npx @capacitor/assets generate`.
 
 To make share links from the app open the web version, set `WEB_URL` in `src/config.ts` once the site is deployed.
 
