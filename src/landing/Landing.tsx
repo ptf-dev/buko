@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   ShoppingBag,
   Smartphone,
-  Sparkles,
   Store,
   TrendingUp,
   Users,
@@ -183,11 +182,10 @@ function GetTheApp({ platform, dark = true, center = false }: { platform: Platfo
   )
 }
 
-function SectionTitle({ eyebrow, title, text, light = false }: { eyebrow: string; title: ReactNode; text?: string; light?: boolean }) {
+function SectionTitle({ title, text, light = false }: { title: ReactNode; text?: string; light?: boolean }) {
   return (
     <Reveal className="mx-auto max-w-3xl text-center">
-      <p className={`text-sm font-semibold tracking-wide uppercase ${light ? 'text-sun' : 'text-brand'}`}>{eyebrow}</p>
-      <h2 className={`mt-3 text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl ${light ? 'text-white' : ''}`}>{title}</h2>
+      <h2 className={`text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl ${light ? 'text-white' : ''}`}>{title}</h2>
       {text && <p className={`mx-auto mt-5 max-w-2xl text-lg sm:text-xl ${light ? 'text-mint' : 'text-muted'}`}>{text}</p>}
     </Reveal>
   )
@@ -281,21 +279,17 @@ function Hero({ platform }: { platform: Platform }) {
       <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-[1.1fr_1fr]">
         <div className="text-center lg:text-left">
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full bg-brand-light px-4 py-1.5 text-sm font-semibold text-brand">
-              <Sparkles className="h-4 w-4" /> Launching soon in Tirana
-            </span>
-          </Reveal>
-          <Reveal delay={80}>
-            <h1 className="mt-6 text-6xl leading-[0.95] font-black tracking-[-0.04em] sm:text-7xl lg:text-8xl">
+            <h1 className="text-6xl leading-[0.95] font-black tracking-[-0.04em] sm:text-7xl lg:text-8xl">
               Good food.
               <br />
-              <span className="text-gradient">Rescued.</span>
+              <span className="text-brand">Rescued</span>
+              <span className="text-sun">.</span>
             </h1>
           </Reveal>
           <Reveal delay={160}>
             <p className="mx-auto mt-6 max-w-xl text-xl text-muted sm:text-2xl lg:mx-0">
               Surprise Bags of delicious unsold food from the best bakeries, restaurants and shops near you — at a{' '}
-              <span className="font-semibold text-ink">third of the price</span>.
+              <span className="font-semibold text-ink">third of the price</span>. Launching soon in Tirana.
             </p>
           </Reveal>
           <Reveal delay={240} className="mt-10">
@@ -393,7 +387,7 @@ function HowItWorks() {
 
   return (
     <section id="how" className="bg-cream py-24 sm:py-32">
-      <SectionTitle eyebrow="How it works" title={<>Three taps from waste to taste.</>} />
+      <SectionTitle title={<>Three taps from waste to taste.</>} />
       <div className="mx-auto mt-16 grid max-w-6xl gap-10 px-5 lg:grid-cols-2 lg:gap-20">
         {/* Sticky phone on large screens, swapping screenshots as each step scrolls past. */}
         <div className="hidden lg:block">
@@ -443,7 +437,6 @@ function Features() {
   return (
     <section id="features" className="py-24 sm:py-32">
       <SectionTitle
-        eyebrow="Features"
         title={
           <>
             Everything you need.
@@ -501,8 +494,7 @@ function Impact() {
       <div className="relative mx-auto grid max-w-6xl items-center gap-16 px-5 lg:grid-cols-2">
         <div>
           <Reveal>
-            <p className="text-sm font-semibold tracking-wide text-sun uppercase">Your impact</p>
-            <h2 className="mt-3 text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl">
+            <h2 className="text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl">
               Every bag is a small win for the planet.
             </h2>
             <p className="mt-5 text-lg text-mint sm:text-xl">
@@ -559,16 +551,15 @@ function ForStores() {
         </Reveal>
         <div className="order-1 text-center lg:order-2 lg:text-left">
           <Reveal>
-            <p className="text-sm font-semibold tracking-wide text-brand uppercase">Buko for Business</p>
-            <h2 className="mt-3 text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl">Own a bakery, café or shop?</h2>
+            <h2 className="text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl">Own a bakery, café or shop?</h2>
             <p className="mt-5 text-lg text-muted sm:text-xl">
-              Join Buko as a launch partner. List your unsold food in minutes and let the neighbourhood rescue it.
+              Join Buko as a launch partner. Apply in two minutes; once we approve your store, you list your unsold food from your own dashboard and the neighbourhood rescues it.
             </p>
             <a
-              href={`${WEB_APP}/partner`}
+              href="/dashboard/apply"
               className="group mt-8 inline-flex h-14 items-center gap-2 rounded-full bg-ink px-8 text-lg font-semibold text-white transition hover:-translate-y-0.5"
             >
-              Try the store dashboard
+              Apply to become a partner
               <ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" />
             </a>
           </Reveal>
@@ -608,7 +599,7 @@ const FAQS = [
 function FAQ() {
   return (
     <section id="faq" className="bg-cream py-24 sm:py-32">
-      <SectionTitle eyebrow="FAQ" title="Questions? Answered." />
+      <SectionTitle title="Questions? Answered." />
       <div className="mx-auto mt-14 max-w-3xl divide-y divide-line px-5">
         {FAQS.map((f, i) => (
           <Reveal key={f.q} delay={i * 40}>
@@ -696,8 +687,8 @@ function Footer() {
           <div>
             <p className="font-semibold text-white">Business</p>
             <ul className="mt-3 space-y-2">
-              <li><a href={`${WEB_APP}/partner`} className="hover:text-white">Store dashboard</a></li>
-              <li><a href="#stores" className="hover:text-white">Become a partner</a></li>
+              <li><a href="/dashboard" className="hover:text-white">Partner login</a></li>
+              <li><a href="/dashboard/apply" className="hover:text-white">Become a partner</a></li>
             </ul>
           </div>
         </div>

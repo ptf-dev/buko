@@ -14,13 +14,6 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-.text-gradient {
-  background: linear-gradient(100deg, #00615f 10%, #1f9d7a 45%, #e5a50a 90%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
 /* Scroll-reveal: elements fade up the first time they enter the viewport. */
 .reveal {
   opacity: 0;

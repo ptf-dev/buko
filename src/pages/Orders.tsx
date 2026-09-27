@@ -1,11 +1,11 @@
 import { ChevronRight, Receipt, Star } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { StoreLogo } from '../components/BagArt'
 import { Button } from '../components/Button'
 import { EmptyState, PageHeader } from '../components/PageHeader'
 import { formatPrice, formatRange, isPickupNow } from '../lib/format'
-import { useAppState, useNow } from '../state/store'
+import { useAppState, useNow, useSync } from '../state/store'
 import type { Order } from '../types'
 
 const STATUS_LABEL: Record<Order['status'], string> = {
@@ -19,6 +19,10 @@ export function Orders() {
   const navigate = useNavigate()
   const { orders, stores } = useAppState()
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
+  const { refresh } = useSync()
+  useEffect(() => {
+    refresh()
+  }, [refresh])
   // A reserved order whose window has ended is treated as missed, and moves to "past".
   const upcoming = orders.filter((o) => o.status === 'reserved' && o.pickupEnd >= now).sort((a, b) => a.pickupStart - b.pickupStart)
   const past = orders.filter((o) => !upcoming.includes(o))

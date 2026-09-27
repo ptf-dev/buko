@@ -2,17 +2,50 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/app", "destination": "/app.html" },
-    { "source": "/app/:path*", "destination": "/app.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "/api?route=:path*"
+    },
+    {
+      "source": "/app",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/dashboard/:path*",
+      "destination": "/dashboard.html"
+    }
   ],
   "redirects": [
-    { "source": "/store/:id", "destination": "/app/store/:id" },
-    { "source": "/partner", "destination": "/app/partner" }
+    {
+      "source": "/store/:id",
+      "destination": "/app/store/:id"
+    },
+    {
+      "source": "/partner",
+      "destination": "/dashboard"
+    },
+    {
+      "source": "/app/partner",
+      "destination": "/dashboard"
+    }
   ],
   "headers": [
     {
       "source": "/downloads/(.*).apk",
-      "headers": [{ "key": "Content-Type", "value": "application/vnd.android.package-archive" }]
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        }
+      ]
     }
   ]
 }

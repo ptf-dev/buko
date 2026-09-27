@@ -1,0 +1,614 @@
+[
+  {
+    "id": "furra-e-lagjes",
+    "name": "Furra e Lagjes",
+    "branch": "Blloku",
+    "category": "bakery",
+    "address": "Rruga Pjetër Bogdani 12, Tiranë",
+    "lat": 41.3196,
+    "lng": 19.8155,
+    "rating": 4.7,
+    "ratingCount": 1284,
+    "highlights": [
+      "Great value",
+      "Friendly staff",
+      "Great quantity"
+    ],
+    "reviews": [
+      {
+        "author": "Arta",
+        "rating": 5,
+        "text": "Two loaves, byrek and a sweet roll. Amazing for the price!"
+      },
+      {
+        "author": "Genti",
+        "rating": 4,
+        "text": "Still warm at closing time. Staff were lovely."
+      }
+    ],
+    "bag": {
+      "id": "bag-furra",
+      "title": "Bakery Surprise Bag",
+      "description": "Rescue a selection of today’s bread, byrek, pastries and sweet treats that did not sell before closing.",
+      "price": 350,
+      "originalPrice": 1050,
+      "quantity": 4,
+      "pickup": {
+        "day": "today",
+        "start": 1140,
+        "end": 1185
+      },
+      "diet": "vegetarian",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "pasticeri-dolce",
+    "name": "Pastiçeri Dolce Vita",
+    "category": "dessert",
+    "address": "Bulevardi Dëshmorët e Kombit 4, Tiranë",
+    "lat": 41.3228,
+    "lng": 19.8203,
+    "rating": 4.5,
+    "ratingCount": 642,
+    "highlights": [
+      "Great quality",
+      "Great value"
+    ],
+    "reviews": [
+      {
+        "author": "Elira",
+        "rating": 5,
+        "text": "Four slices of cake and trileçe. My family loved it."
+      },
+      {
+        "author": "Klodi",
+        "rating": 4,
+        "text": "Beautiful desserts, pickup was quick."
+      }
+    ],
+    "bag": {
+      "id": "bag-dolce",
+      "title": "Sweet Surprise Bag",
+      "description": "Cakes, trileçe, cookies and pastries from today’s display counter.",
+      "price": 450,
+      "originalPrice": 1400,
+      "quantity": 2,
+      "pickup": {
+        "day": "today",
+        "start": 1200,
+        "end": 1230
+      },
+      "diet": "vegetarian",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "market-fresku",
+    "name": "Market Fresku",
+    "branch": "Pazari i Ri",
+    "category": "groceries",
+    "address": "Sheshi Avni Rustemi 3, Tiranë",
+    "lat": 41.3301,
+    "lng": 19.8269,
+    "rating": 4.3,
+    "ratingCount": 2210,
+    "highlights": [
+      "Great quantity",
+      "Great value"
+    ],
+    "reviews": [
+      {
+        "author": "Besa",
+        "rating": 4,
+        "text": "Lots of fruit and veg, a yoghurt and some cheese."
+      },
+      {
+        "author": "Driton",
+        "rating": 5,
+        "text": "Enough groceries for three days. Incredible."
+      }
+    ],
+    "bag": {
+      "id": "bag-fresku",
+      "title": "Groceries Surprise Bag",
+      "description": "Fruit, vegetables, dairy and pantry items that are close to their best-before date but still perfectly good.",
+      "price": 500,
+      "originalPrice": 1600,
+      "quantity": 6,
+      "pickup": {
+        "day": "today",
+        "start": 1080,
+        "end": 1140
+      },
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "sushi-koi",
+    "name": "Koi Sushi Bar",
+    "category": "meals",
+    "address": "Rruga Ismail Qemali 27, Tiranë",
+    "lat": 41.3183,
+    "lng": 19.8121,
+    "rating": 4.6,
+    "ratingCount": 389,
+    "highlights": [
+      "Great quality",
+      "Friendly staff"
+    ],
+    "reviews": [
+      {
+        "author": "Ina",
+        "rating": 5,
+        "text": "Two full sushi boxes. Fresh and delicious."
+      },
+      {
+        "author": "Marsel",
+        "rating": 4,
+        "text": "Great quality, a bit small for two people."
+      }
+    ],
+    "bag": {
+      "id": "bag-koi",
+      "title": "Sushi Surprise Box",
+      "description": "A selection of freshly made sushi rolls and nigiri that were prepared today.",
+      "price": 700,
+      "originalPrice": 2100,
+      "quantity": 1,
+      "pickup": {
+        "day": "today",
+        "start": 1290,
+        "end": 1320
+      },
+      "allergensNote": "May contain fish, shellfish, sesame, soy and gluten. Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "green-bowl",
+    "name": "Green Bowl",
+    "category": "meals",
+    "address": "Rruga Sami Frashëri 18, Tiranë",
+    "lat": 41.3212,
+    "lng": 19.8178,
+    "rating": 4.8,
+    "ratingCount": 512,
+    "highlights": [
+      "Great quality",
+      "Great value",
+      "Friendly staff"
+    ],
+    "reviews": [
+      {
+        "author": "Sara",
+        "rating": 5,
+        "text": "Two huge salad bowls and a smoothie. Vegan heaven."
+      },
+      {
+        "author": "Luan",
+        "rating": 5,
+        "text": "Best bag in Tirana, hands down."
+      }
+    ],
+    "bag": {
+      "id": "bag-green",
+      "title": "Vegan Meal Bag",
+      "description": "Plant-based bowls, wraps and salads made fresh today.",
+      "price": 400,
+      "originalPrice": 1200,
+      "quantity": 3,
+      "pickup": {
+        "day": "today",
+        "start": 960,
+        "end": 990
+      },
+      "diet": "vegan",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions.",
+      "isNew": true
+    }
+  },
+  {
+    "id": "pizzeria-napoli",
+    "name": "Pizzeria Napoli",
+    "category": "meals",
+    "address": "Rruga e Durrësit 45, Tiranë",
+    "lat": 41.3311,
+    "lng": 19.8104,
+    "rating": 4.2,
+    "ratingCount": 877,
+    "highlights": [
+      "Great quantity"
+    ],
+    "reviews": [
+      {
+        "author": "Ergi",
+        "rating": 4,
+        "text": "Three big slices and a calzone. Fed two of us."
+      },
+      {
+        "author": "Anisa",
+        "rating": 4,
+        "text": "Tasty and filling."
+      }
+    ],
+    "bag": {
+      "id": "bag-napoli",
+      "title": "Pizza Surprise Bag",
+      "description": "Pizza slices, focaccia and calzone baked today.",
+      "price": 380,
+      "originalPrice": 1150,
+      "quantity": 5,
+      "pickup": {
+        "day": "today",
+        "start": 1320,
+        "end": 1350
+      },
+      "diet": "vegetarian",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "kafe-flora",
+    "name": "Kafe Flora",
+    "category": "drinks",
+    "address": "Rruga Myslym Shyri 33, Tiranë",
+    "lat": 41.3239,
+    "lng": 19.8098,
+    "rating": 4.4,
+    "ratingCount": 301,
+    "highlights": [
+      "Friendly staff",
+      "Great value"
+    ],
+    "reviews": [
+      {
+        "author": "Jona",
+        "rating": 5,
+        "text": "Croissants, a muffin and two iced coffees!"
+      },
+      {
+        "author": "Ardit",
+        "rating": 4,
+        "text": "Cozy place, nice surprise bag."
+      }
+    ],
+    "bag": {
+      "id": "bag-flora",
+      "title": "Café Surprise Bag",
+      "description": "Pastries, sandwiches and bottled drinks from today’s café counter.",
+      "price": 300,
+      "originalPrice": 900,
+      "quantity": 0,
+      "pickup": {
+        "day": "today",
+        "start": 1020,
+        "end": 1050
+      },
+      "diet": "vegetarian",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "hotel-tirana-buffet",
+    "name": "Grand Plaza Buffet",
+    "category": "meals",
+    "address": "Sheshi Skënderbej 1, Tiranë",
+    "lat": 41.3279,
+    "lng": 19.8195,
+    "rating": 4.1,
+    "ratingCount": 190,
+    "highlights": [
+      "Great quantity",
+      "Great value"
+    ],
+    "reviews": [
+      {
+        "author": "Dea",
+        "rating": 4,
+        "text": "A big box of pasta, rice and grilled vegetables."
+      },
+      {
+        "author": "Kristi",
+        "rating": 4,
+        "text": "Good food, pickup at the side entrance."
+      }
+    ],
+    "bag": {
+      "id": "bag-plaza",
+      "title": "Buffet Surprise Box",
+      "description": "A generous box filled from the end of today’s lunch buffet.",
+      "price": 600,
+      "originalPrice": 2000,
+      "quantity": 8,
+      "pickup": {
+        "day": "today",
+        "start": 900,
+        "end": 945
+      },
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "mishi-grill",
+    "name": "Zgara Tradita",
+    "category": "meals",
+    "address": "Rruga Kavajës 72, Tiranë",
+    "lat": 41.3244,
+    "lng": 19.8012,
+    "rating": 4.6,
+    "ratingCount": 720,
+    "highlights": [
+      "Great quality",
+      "Great quantity"
+    ],
+    "reviews": [
+      {
+        "author": "Fatjon",
+        "rating": 5,
+        "text": "Qofte, salad and fresh bread. Delicious."
+      },
+      {
+        "author": "Megi",
+        "rating": 4,
+        "text": "Real traditional food, nice people."
+      }
+    ],
+    "bag": {
+      "id": "bag-zgara",
+      "title": "Traditional Meal Bag",
+      "description": "Traditional grilled dishes, sides and salads made today.",
+      "price": 550,
+      "originalPrice": 1700,
+      "quantity": 2,
+      "pickup": {
+        "day": "tomorrow",
+        "start": 780,
+        "end": 810
+      },
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "bio-shop",
+    "name": "Bio Shop Organike",
+    "category": "groceries",
+    "address": "Rruga Tish Daija 8, Tiranë",
+    "lat": 41.3149,
+    "lng": 19.8231,
+    "rating": 4.5,
+    "ratingCount": 244,
+    "highlights": [
+      "Great quality"
+    ],
+    "reviews": [
+      {
+        "author": "Rina",
+        "rating": 5,
+        "text": "Organic veggies, honey and eggs. Wonderful."
+      },
+      {
+        "author": "Alban",
+        "rating": 4,
+        "text": "Great mix of products."
+      }
+    ],
+    "bag": {
+      "id": "bag-bio",
+      "title": "Organic Groceries Bag",
+      "description": "Organic produce, local honey, cheese and pantry staples nearing their date.",
+      "price": 650,
+      "originalPrice": 2000,
+      "quantity": 3,
+      "pickup": {
+        "day": "tomorrow",
+        "start": 600,
+        "end": 660
+      },
+      "diet": "vegetarian",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions.",
+      "isNew": true
+    }
+  },
+  {
+    "id": "donut-lab",
+    "name": "Donut Lab",
+    "category": "dessert",
+    "address": "Rruga Abdyl Frashëri 5, Tiranë",
+    "lat": 41.3188,
+    "lng": 19.8189,
+    "rating": 4.3,
+    "ratingCount": 455,
+    "highlights": [
+      "Great value",
+      "Great quantity"
+    ],
+    "reviews": [
+      {
+        "author": "Noa",
+        "rating": 4,
+        "text": "Six donuts for the price of two!"
+      },
+      {
+        "author": "Eri",
+        "rating": 5,
+        "text": "Kids were so happy."
+      }
+    ],
+    "bag": {
+      "id": "bag-donut",
+      "title": "Donut Surprise Box",
+      "description": "An assortment of today’s glazed and filled donuts.",
+      "price": 320,
+      "originalPrice": 1000,
+      "quantity": 7,
+      "pickup": {
+        "day": "today",
+        "start": 1230,
+        "end": 1260
+      },
+      "diet": "vegetarian",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "fruta-perime",
+    "name": "Fruta & Perime Ana",
+    "category": "groceries",
+    "address": "Rruga Qemal Stafa 110, Tiranë",
+    "lat": 41.3342,
+    "lng": 19.8224,
+    "rating": 4,
+    "ratingCount": 133,
+    "highlights": [
+      "Great quantity"
+    ],
+    "reviews": [
+      {
+        "author": "Iris",
+        "rating": 4,
+        "text": "Big bag of slightly ugly but tasty fruit."
+      },
+      {
+        "author": "Edi",
+        "rating": 4,
+        "text": "Perfect for smoothies and soups."
+      }
+    ],
+    "bag": {
+      "id": "bag-fruta",
+      "title": "Fruit & Veg Bag",
+      "description": "Wonky fruit and vegetables that are still fresh and tasty.",
+      "price": 250,
+      "originalPrice": 800,
+      "quantity": 10,
+      "pickup": {
+        "day": "today",
+        "start": 1170,
+        "end": 1230
+      },
+      "diet": "vegan",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "burek-korca",
+    "name": "Byrektore Korça",
+    "category": "bakery",
+    "address": "Rruga Fortuzi 9, Tiranë",
+    "lat": 41.329,
+    "lng": 19.814,
+    "rating": 4.9,
+    "ratingCount": 980,
+    "highlights": [
+      "Great quality",
+      "Great value",
+      "Friendly staff"
+    ],
+    "reviews": [
+      {
+        "author": "Olsi",
+        "rating": 5,
+        "text": "Best byrek in town and so cheap through Buko."
+      },
+      {
+        "author": "Xhesi",
+        "rating": 5,
+        "text": "Spinach, cheese and meat byrek. All perfect."
+      }
+    ],
+    "bag": {
+      "id": "bag-burek",
+      "title": "Byrek Surprise Bag",
+      "description": "Freshly baked byrek with spinach, cheese, meat or pumpkin.",
+      "price": 280,
+      "originalPrice": 850,
+      "quantity": 1,
+      "pickup": {
+        "day": "today",
+        "start": 720,
+        "end": 750
+      },
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  },
+  {
+    "id": "florist-lulet",
+    "name": "Lulet e Tiranës",
+    "category": "other",
+    "address": "Rruga Barrikadave 20, Tiranë",
+    "lat": 41.3308,
+    "lng": 19.8172,
+    "rating": 4.6,
+    "ratingCount": 87,
+    "highlights": [
+      "Great quality"
+    ],
+    "reviews": [
+      {
+        "author": "Klea",
+        "rating": 5,
+        "text": "A gorgeous bouquet for my mum."
+      },
+      {
+        "author": "Arber",
+        "rating": 4,
+        "text": "Lovely flowers that lasted a week."
+      }
+    ],
+    "bag": {
+      "id": "bag-lulet",
+      "title": "Flower Surprise Bag",
+      "description": "Beautiful flowers and small plants that need a new home today.",
+      "price": 400,
+      "originalPrice": 1300,
+      "quantity": 2,
+      "pickup": {
+        "day": "today",
+        "start": 1110,
+        "end": 1140
+      },
+      "allergensNote": "Not edible. Some plants may be toxic to pets."
+    }
+  },
+  {
+    "id": "deli-mediterane",
+    "name": "Deli Mediterane",
+    "category": "meals",
+    "address": "Rruga Mustafa Matohiti 14, Tiranë",
+    "lat": 41.317,
+    "lng": 19.8085,
+    "rating": 4.4,
+    "ratingCount": 268,
+    "highlights": [
+      "Great quality",
+      "Great value"
+    ],
+    "reviews": [
+      {
+        "author": "Enxhi",
+        "rating": 5,
+        "text": "Hummus, falafel, pita and salads."
+      },
+      {
+        "author": "Taulant",
+        "rating": 4,
+        "text": "Very tasty and filling."
+      }
+    ],
+    "bag": {
+      "id": "bag-deli",
+      "title": "Mediterranean Meal Bag",
+      "description": "Mezze, salads, wraps and dips prepared fresh today.",
+      "price": 480,
+      "originalPrice": 1450,
+      "quantity": 4,
+      "pickup": {
+        "day": "tomorrow",
+        "start": 1200,
+        "end": 1230
+      },
+      "diet": "vegetarian",
+      "allergensNote": "Contents change daily, so we cannot guarantee a bag is free of any allergen. Ask the store at pickup if you have questions."
+    }
+  }
+]

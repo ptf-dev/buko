@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Per-machine tool settings
+.claude/settings.local.json
+.impeccable/config.local.json
+.impeccable/cache/

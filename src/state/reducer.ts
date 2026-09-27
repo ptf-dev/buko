@@ -51,8 +51,11 @@ export type Action =
   | { type: 'collectOrder'; orderId: string; now: number }
   | { type: 'rateOrder'; orderId: string; rating: number; tags: string[] }
   | { type: 'updateProfile'; profile: Partial<UserProfile> }
-  | { type: 'setBagQuantity'; storeId: string; quantity: number }
   | { type: 'resetDemo' }
+  /** Live store list from the server replaces the local copy. */
+  | { type: 'hydrateStores'; stores: Store[] }
+  /** Server copies of this device's orders win over local ones with the same id. */
+  | { type: 'upsertOrders'; orders: Order[] }
 
 /** Max bags a single customer may reserve per order. */
 export const MAX_PER_ORDER = 4
@@ -136,10 +139,16 @@ export function reducer(state: AppState, action: Action): AppState {
       }
     case 'updateProfile':
       return { ...state, profile: { ...state.profile, ...action.profile } }
-    case 'setBagQuantity':
-      return { ...state, stores: updateQuantity(state.stores, action.storeId, action.quantity) }
     case 'resetDemo':
       return initialState()
+    case 'hydrateStores':
+      return { ...state, stores: action.stores }
+    case 'upsertOrders': {
+      if (!action.orders.length) return state
+      const byId = new Map(state.orders.map((o) => [o.id, o]))
+      for (const o of action.orders) byId.set(o.id, o)
+      return { ...state, orders: [...byId.values()].sort((a, b) => b.createdAt - a.createdAt) }
+    }
   }
 }
 

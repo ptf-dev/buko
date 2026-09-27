@@ -1,5 +1,5 @@
 import { CalendarPlus, Check, Clock, Leaf, MapPin, Navigation, PartyPopper, Receipt, Star } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StoreLogo } from '../components/BagArt'
 import { Button, Chip } from '../components/Button'
@@ -9,7 +9,7 @@ import { SwipeToConfirm } from '../components/SwipeToConfirm'
 import { RATING_TAGS } from '../data/categories'
 import { co2eKg, formatPrice, formatRange, isPickupNow, timeUntil } from '../lib/format'
 import { isNative } from '../lib/native'
-import { useAppState, useDispatch, useNow } from '../state/store'
+import { useAppState, useNow, useOrderActions, useSync } from '../state/store'
 import { PAYMENT_METHODS } from './CheckoutSheet'
 
 /** Customers can cancel for a full refund until this long before pickup starts. */
@@ -25,7 +25,18 @@ export function OrderDetail() {
   const navigate = useNavigate()
   const now = useNow(10_000)
   const { orders, stores } = useAppState()
-  const dispatch = useDispatch()
+  const actions = useOrderActions()
+  const { refresh } = useSync()
+  // Pick up changes made at the store (e.g. the partner validated the pickup code).
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+  const [actionError, setActionError] = useState('')
+  const run = (fn: () => Promise<unknown>) =>
+    fn().then(
+      () => setActionError(''),
+      (err: unknown) => setActionError(err instanceof Error ? err.message : 'Something went wrong. Please try again.'),
+    )
   const order = orders.find((o) => o.id === id)
   const store = order && stores.find((s) => s.id === order.storeId)
   const [confirmCancel, setConfirmCancel] = useState(false)
@@ -69,6 +80,11 @@ export function OrderDetail() {
   return (
     <div className="min-h-full bg-cream pb-10">
       <PageHeader title="Your order" back />
+      {actionError && (
+        <p role="alert" className="bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {actionError}
+        </p>
+      )}
 
       {justReserved && order.status === 'reserved' && (
         <div className="animate-fade-in bg-brand px-4 py-6 text-center text-white">
@@ -144,7 +160,7 @@ export function OrderDetail() {
 
       {order.status === 'reserved' && !missed && (
         <section className="mt-2 bg-white px-4 py-4">
-          <SwipeToConfirm label="Swipe to collect" onConfirm={() => dispatch({ type: 'collectOrder', orderId: order.id, now: Date.now() })} />
+          <SwipeToConfirm label="Swipe to collect" onConfirm={() => run(() => actions.collect(order.id))} />
           <p className="mt-2 text-center text-xs text-muted">
             Only swipe when you’re at the store and staff are handing you your bag.
           </p>
@@ -183,7 +199,7 @@ export function OrderDetail() {
                       </Chip>
                     ))}
                   </div>
-                  <Button className="mt-4 w-full" onClick={() => dispatch({ type: 'rateOrder', orderId: order.id, rating, tags })}>
+                  <Button className="mt-4 w-full" onClick={() => run(() => actions.rate(order.id, rating, tags))}>
                     Submit rating
                   </Button>
                 </>
@@ -247,9 +263,8 @@ export function OrderDetail() {
               variant="danger"
               className="flex-1"
               onClick={() => {
-                dispatch({ type: 'cancelOrder', orderId: order.id })
                 setConfirmCancel(false)
-                navigate('/orders')
+                run(() => actions.cancel(order.id).then(() => navigate('/orders')))
               }}
             >
               Yes, cancel

@@ -25,6 +25,9 @@ export const WEB_URL: string = 'https://buko-five.vercel.app/app'
 /** Marketing site, linked from the invite-a-friend share. */
 export const LANDING_URL = 'https://buko-five.vercel.app'
 
+/** Partner & admin dashboard (web only). */
+export const DASHBOARD_URL = `${LANDING_URL}/dashboard`
+
 /** App store listings. Leave empty until the apps are live; the landing page then shows "Coming soon". */
 export const APP_STORE_URL: string = ''
 export const PLAY_STORE_URL: string = ''

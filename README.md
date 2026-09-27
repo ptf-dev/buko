@@ -20,19 +20,56 @@ Rescue delicious unsold food from local stores at a third of the price. Buko is 
 - Validate a customer's pickup code at the counter
 - See reservations, collected bags and revenue
 
+## Partner & admin dashboard
+
+`/dashboard` (`dashboard.html`, `src/dashboard/`), web only:
+
+- **Partners** apply at `/dashboard/apply` (linked from the landing page) and get a login right away. Once an admin approves the store, they can:
+  - set today's bag count and pause selling,
+  - edit their Surprise Bag (price, pickup window, diet, allergens) with a live preview,
+  - see reservations as they arrive and check customers' pickup codes,
+  - edit their store profile and map location.
+- **Admins** (a small team, all with equal access) see platform KPIs and a daily chart. They approve, reject, suspend or reactivate stores, edit any store's listing or profile, browse all orders, and manage the admin team. They can also load or remove labelled sample orders to try the dashboard before launch.
+- The first admin account is created at `/dashboard/setup`, which only works while no admin exists.
+
+## Backend
+
+`api/` holds a Vercel Function (plain ESM JavaScript, type-checked with `// @ts-check`) with a Postgres database (Neon via Vercel):
+
+- Tables are created automatically on first request, and an empty database is seeded with the demo stores (`api/_lib/seed-stores.json`, exported from `src/data/stores.ts` by `node scripts/export-seed.mjs`).
+- Passwords are hashed with scrypt. Sessions are httpOnly cookies.
+- Customers don't need an account: their orders are tied to a random device ID.
+- Pickup windows are computed in Tirana time (Europe/Tirane) whatever the server's timezone.
+- Reserving locks the bag row, so two customers can't buy the last bag.
+- The customer app loads live stock and order status from the API. When no API is reachable (e.g. `npm run dev` without a database), it falls back to the built-in demo data.
+
+### Connecting the database (once)
+
+1. On vercel.com, open the **buko** project → **Storage** → **Create Database** → **Neon (Serverless Postgres)** → connect it to the project for all environments. This sets `DATABASE_URL`.
+2. Redeploy, then open `/dashboard` and create the first admin account.
+
+### Running the full stack locally
+
+```bash
+npm run build:web
+DATABASE_URL=postgres://user@localhost:5432/buko npm run serve:local   # http://localhost:4180
+```
+
 ## Website & landing page
 
 Live at **https://buko-five.vercel.app**:
 
 - `/` is the marketing landing page (`landing.html`, `src/landing/`). Its buttons link to the web app, the Android download and the App Store.
 - `/app` is the web app (`index.html`, `src/App.tsx`).
+- `/dashboard` is the partner & admin dashboard.
+- `/api/*` is the backend.
 - `/downloads/buko.apk` is the Android beta download.
 
 `npm run build:web` builds both pages and arranges them for Vercel (`scripts/web-layout.mjs`, `vercel.json`). Store links, the landing URL and the web app URL are set in `src/config.ts`. Until `APP_STORE_URL` / `PLAY_STORE_URL` are filled in, the landing page shows "Coming soon" for iPhone and offers the APK for Android. Screenshots used on the landing page are in `public/landing/`.
 
 ## Tech
 
-React 19, TypeScript, Vite, Tailwind CSS v4, React Router, Leaflet / react-leaflet, lucide-react icons. State lives in a reducer and is saved to `localStorage`. Seed data is in `src/data/stores.ts`: 15 fictional stores in central Tirana, priced in Lek.
+React 19, TypeScript, Vite, Tailwind CSS v4, React Router, Leaflet / react-leaflet, lucide-react icons. Vercel Functions + Postgres (`pg`). Customer app state lives in a reducer, is saved to `localStorage`, and syncs with the API. Seed data is in `src/data/stores.ts`: 15 fictional stores in central Tirana, priced in Lek.
 
 City, currency and default location are set in `src/config.ts`.
 
@@ -65,6 +102,14 @@ To make share links from the app open the web version, set `WEB_URL` in `src/con
 
 ## Next steps for production
 
-- Backend and API for stores, inventory and orders (replace `SEED_STORES` and the localStorage reducer)
-- Real authentication and payments (e.g. Stripe), with email receipts
+- Real payments (e.g. Stripe) and payouts to partners, with email receipts and password-reset emails
+- Customer accounts (orders are currently tied to the device)
 - Store photos, push notifications for favourites, and signed release builds for Google Play and the App Store
+
+## Design tooling
+
+[Impeccable](https://impeccable.style) is installed as a project skill in `.claude/skills/impeccable` (Apache-2.0), and product context is in `PRODUCT.md`. Its design-check hook is enabled in `.impeccable/config.json`. On a new machine, run `/impeccable hooks on` once in Claude Code so the hook is installed there too (the hook settings file is per-machine). To run the detector by hand:
+
+```bash
+.claude/skills/impeccable/scripts/impeccable detect src/dashboard src/landing
+```

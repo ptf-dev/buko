@@ -5,8 +5,8 @@ import { Button } from '../components/Button'
 import { Sheet } from '../components/Sheet'
 import { formatPrice, formatRange } from '../lib/format'
 import type { Listing } from '../lib/search'
-import { MAX_PER_ORDER, randomId, randomPickupCode } from '../state/reducer'
-import { useAppState, useDispatch, useNow } from '../state/store'
+import { MAX_PER_ORDER } from '../state/reducer'
+import { useAppState, useNow, useOrderActions } from '../state/store'
 import type { PaymentMethod } from '../types'
 
 export const PAYMENT_METHODS: { value: PaymentMethod; label: string; detail: string }[] = [
@@ -23,32 +23,28 @@ export function CheckoutSheet({ open, onClose, listing }: { open: boolean; onClo
 function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: Listing }) {
   const { store, start, end } = listing
   const { paymentMethod: savedMethod } = useAppState()
-  const dispatch = useDispatch()
+  const actions = useOrderActions()
   const navigate = useNavigate()
   const now = useNow()
   const [quantity, setQuantity] = useState(1)
   const [method, setMethod] = useState<PaymentMethod>(savedMethod)
   const [agreed, setAgreed] = useState(false)
   const [paying, setPaying] = useState(false)
+  const [error, setError] = useState('')
   const max = Math.min(store.bag.quantity, MAX_PER_ORDER)
   const total = store.bag.price * quantity
 
-  const pay = () => {
+  const pay = async () => {
     setPaying(true)
-    // Simulated payment round-trip.
-    setTimeout(() => {
-      const orderId = randomId()
-      dispatch({
-        type: 'reserve',
-        storeId: store.id,
-        quantity,
-        paymentMethod: method,
-        now: Date.now(),
-        orderId,
-        pickupCode: randomPickupCode(),
-      })
-      navigate(`/orders/${orderId}?new=1`, { replace: false })
-    }, 1200)
+    setError('')
+    try {
+      // Payment is simulated; the reservation itself is real when the server is connected.
+      const [orderId] = await Promise.all([actions.reserve(store.id, quantity, method), new Promise((r) => setTimeout(r, 900))])
+      navigate(`/orders/${orderId}?new=1`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setPaying(false)
+    }
   }
 
   return (
@@ -57,6 +53,12 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
       onClose={paying ? () => {} : onClose}
       title="Reserve your bag"
       footer={
+        <>
+        {error && (
+          <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">
+            {error}
+          </p>
+        )}
         <Button className="w-full" disabled={!agreed || paying || max <= 0} onClick={pay}>
           {paying ? (
             <>
@@ -66,6 +68,7 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
             `Pay ${formatPrice(total)}`
           )}
         </Button>
+        </>
       }
     >
       <div className="rounded-xl bg-cream p-3 text-sm">

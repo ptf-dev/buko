@@ -5,7 +5,7 @@ import { Button, Chip } from '../components/Button'
 import { Toggle } from '../components/FiltersSheet'
 import { PageHeader } from '../components/PageHeader'
 import { Sheet } from '../components/Sheet'
-import { APP_NAME, LANDING_URL } from '../config'
+import { APP_NAME, DASHBOARD_URL, LANDING_URL } from '../config'
 import { DIET_LABELS } from '../data/categories'
 import { formatPrice } from '../lib/format'
 import { shareContent } from '../lib/native'
@@ -107,7 +107,13 @@ export function Profile() {
           />
         </label>
         <MenuButton icon={<Gift className="h-5 w-5" />} label={inviteCopied ? 'Invite link copied!' : 'Invite your friends'} onClick={invite} />
-        <MenuLink icon={<Store className="h-5 w-5" />} label="Buko for Business" to="/partner" />
+        <a href={DASHBOARD_URL} className="flex items-center gap-3 border-t border-line px-4 py-4">
+          <span className="text-muted">
+            <Store className="h-5 w-5" />
+          </span>
+          <span className="flex-1 font-medium">Buko for Business</span>
+          <ChevronRight className="h-5 w-5 text-muted" />
+        </a>
         <MenuLink icon={<CircleHelp className="h-5 w-5" />} label="How Buko works" to="/welcome" />
         <MenuButton icon={<RotateCcw className="h-5 w-5" />} label="Reset demo data" onClick={() => setResetOpen(true)} />
       </section>

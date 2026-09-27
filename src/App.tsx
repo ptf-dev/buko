@@ -7,11 +7,19 @@ import { Favourites } from './pages/Favourites'
 import { Onboarding } from './pages/Onboarding'
 import { OrderDetail } from './pages/OrderDetail'
 import { Orders } from './pages/Orders'
-import { Partner } from './pages/Partner'
 import { Profile } from './pages/Profile'
 import { StoreDetail } from './pages/StoreDetail'
+import { DASHBOARD_URL } from './config'
 import { ROUTER_BASENAME } from './lib/native'
 import { AppProvider, useAppState } from './state/store'
+
+/** Old in-app partner page: the partner dashboard is now a separate site section. */
+function ToDashboard() {
+  useEffect(() => {
+    window.location.href = DASHBOARD_URL
+  }, [])
+  return null
+}
 
 /** Routes that show the bottom tab bar. */
 const TAB_ROUTES = ['/', '/browse', '/orders', '/favourites', '/profile']
@@ -39,7 +47,7 @@ function Shell() {
           <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/favourites" element={<Favourites />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/partner" element={<Partner />} />
+          <Route path="/partner" element={<ToDashboard />} />
           <Route path="/welcome" element={<Onboarding />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
