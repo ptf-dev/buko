@@ -100,6 +100,19 @@ The project needs Node.js 22.12 or newer. Android needs JDK 21 and the Android S
 
 To make share links from the app open the web version, set `WEB_URL` in `src/config.ts` once the site is deployed.
 
+## Cloud builds (Codemagic)
+
+`codemagic.yaml` defines four workflows:
+
+| Workflow | Output | Setup needed |
+|---|---|---|
+| `android-debug` | Test APK (runs on every push) | None |
+| `ios-simulator` | Unsigned simulator build, to check the iOS app compiles | None |
+| `android-release` | Signed `.aab` for Google Play | Upload a keystore named `ngopu_keystore` in Codemagic |
+| `ios-release` | Signed `.ipa`, uploaded to TestFlight | Apple Developer account, App Store Connect API key in Codemagic named `codemagic`, and an app with bundle ID `al.ngopu.app` |
+
+Android version codes come from Codemagic's `BUILD_NUMBER`. Release signing reads the `CM_KEYSTORE_*` variables that Codemagic sets (see `android/app/build.gradle`).
+
 ## Next steps for production
 
 - Real payments (e.g. Stripe) and payouts to partners, with email receipts and password-reset emails

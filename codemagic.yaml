@@ -1,0 +1,148 @@
+# Codemagic CI for the Ngopu Capacitor app (React + Vite web code in native Android/iOS shells).
+# Docs: https://docs.codemagic.io/yaml-quick-start/building-an-ionic-app/
+#
+# Workflows:
+#   android-debug   Test APK you can install on any Android phone. No setup needed.
+#   ios-simulator   Checks that the iOS app compiles (unsigned). No Apple account needed.
+#   android-release Signed .aab for Google Play. Needs the keystore "ngopu_keystore" uploaded to Codemagic.
+#   ios-release     Signed .ipa uploaded to TestFlight. Needs an Apple Developer account connected to Codemagic.
+
+definitions:
+  environment: &shared_env
+    node: 22.14.0 # Vite 8 / Capacitor 8 need Node 22.12+
+    java: 21
+  scripts:
+    - &install
+      name: Install dependencies
+      script: npm ci
+    - &test
+      name: Type-check and unit tests
+      script: |
+        npx tsc -b
+        npm test
+    - &web_build
+      name: Build the web app and copy it into the native projects
+      # cap:sync = vite build + strip website-only files + npx cap sync
+      script: npm run cap:sync
+
+workflows:
+  android-debug:
+    name: Android test APK
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      <<: *shared_env
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: '*'
+          include: true
+      cancel_previous_builds: true
+    scripts:
+      - *install
+      - *test
+      - *web_build
+      - name: Build debug APK
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          cd android && ./gradlew assembleDebug
+    artifacts:
+      - android/app/build/outputs/apk/debug/*.apk
+    publishing:
+      email:
+        recipients:
+          - info@propfirmstech.com
+        notify:
+          success: true
+          failure: true
+
+  ios-simulator:
+    name: iOS compile check (simulator, unsigned)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      <<: *shared_env
+      xcode: latest
+    scripts:
+      - *install
+      - *web_build
+      - name: Build for the iOS simulator
+        script: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          cd build/ios/Build/Products/Debug-iphonesimulator && zip -qr "$CM_BUILD_DIR/Ngopu-simulator.zip" App.app
+    artifacts:
+      - Ngopu-simulator.zip
+
+  android-release:
+    name: Android release (Google Play)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      <<: *shared_env
+      android_signing:
+        - ngopu_keystore # Upload in Codemagic: Team settings → Code signing identities → Android keystores
+    scripts:
+      - *install
+      - *test
+      - *web_build
+      - name: Build signed app bundle
+        # build.gradle reads CM_KEYSTORE_* (set by android_signing) and BUILD_NUMBER (version code).
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          cd android && ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab
+    publishing:
+      email:
+        recipients:
+          - info@propfirmstech.com
+      # Uncomment once the app exists in Google Play Console and a service account is added to Codemagic
+      # as the GCLOUD_SERVICE_ACCOUNT_CREDENTIALS variable in a "google_play" group (add the group above).
+      # google_play:
+      #   credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+      #   track: internal
+      #   submit_as_draft: true
+
+  ios-release:
+    name: iOS release (TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: codemagic # Name of the App Store Connect API key added in Codemagic → Team integrations
+    environment:
+      <<: *shared_env
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: al.ngopu.app
+    scripts:
+      - *install
+      - *test
+      - *web_build
+      - name: Apply signing profiles
+        script: xcode-project use-profiles
+      - name: Build signed IPA
+        script: |
+          xcode-project build-ipa \
+            --project ios/App/App.xcodeproj \
+            --scheme App \
+            --archive-xcargs "CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - info@propfirmstech.com
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
