@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
-  appId: 'al.buko.app',
-  appName: 'Buko',
+  appId: 'al.ngopu.app',
+  appName: 'Ngopu',
   webDir: 'dist',
   backgroundColor: '#00615f',
   plugins: {

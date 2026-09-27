@@ -59,8 +59,8 @@ export function Login() {
   return (
     <AuthLayout>
       <Card>
-        <h1 className="text-2xl font-bold tracking-tight">Log in to Buko for Business</h1>
-        <p className="mt-1.5 text-[15px] text-muted">For partner stores and the Buko team.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Log in to Ngopu for Business</h1>
+        <p className="mt-1.5 text-[15px] text-muted">For partner stores and the Ngopu team.</p>
         <form onSubmit={submit} className="mt-7 space-y-4" noValidate>
           <FormError message={error} />
           <Field label="Email">
@@ -82,7 +82,7 @@ export function Login() {
           Apply to become a partner
         </Link>
       </p>
-      <p className="mt-2 text-center text-[13px] text-muted">Forgot your password? Ask the Buko team to reset it.</p>
+      <p className="mt-2 text-center text-[13px] text-muted">Forgot your password? Ask the Ngopu team to reset it.</p>
     </AuthLayout>
   )
 }
@@ -177,7 +177,7 @@ export function Apply() {
   return (
     <AuthLayout wide>
       <Card>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">Sell your surplus food on Buko</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">Sell your surplus food on Ngopu</h1>
         <p className="mt-2 max-w-lg text-[15px] text-muted">
           Tell us about your store. We review every application, usually within two working days. Once approved, you list today’s
           Surprise Bags from your dashboard.
@@ -271,9 +271,9 @@ export function Pending() {
         </h1>
         <p className="mt-2 text-[15px] leading-relaxed text-muted">
           {rejected
-            ? 'We can’t add your store to Buko right now. If you think this is a mistake, reply to our email or contact the Buko team.'
+            ? 'We can’t add your store to Ngopu right now. If you think this is a mistake, reply to our email or contact the Ngopu team.'
             : suspended
-              ? 'Customers can’t see your Surprise Bags at the moment. Contact the Buko team to reactivate your store.'
+              ? 'Customers can’t see your Surprise Bags at the moment. Contact the Ngopu team to reactivate your store.'
               : 'We usually review applications within two working days. As soon as your store is approved, log in here to publish your first Surprise Bag.'}
         </p>
         {user && (
@@ -309,7 +309,7 @@ export function NoDatabase({ offline }: { offline?: boolean }) {
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-light text-brand">
           <Database className="h-6 w-6" />
         </span>
-        <h1 className="mt-4 text-2xl font-bold tracking-tight">{offline ? 'Can’t reach the Buko server' : 'Connect the database to start'}</h1>
+        <h1 className="mt-4 text-2xl font-bold tracking-tight">{offline ? 'Can’t reach the Ngopu server' : 'Connect the database to start'}</h1>
         {offline ? (
           <p className="mt-2 text-[15px] text-muted">Check your internet connection and try again.</p>
         ) : (
@@ -330,7 +330,7 @@ export function NoDatabase({ offline }: { offline?: boolean }) {
                 <code className="rounded bg-cream px-1.5 py-0.5 text-sm">DATABASE_URL</code> for you.
               </li>
               <li>
-                Redeploy the latest deployment. Then come back here to create the first admin account. Buko creates its tables and demo stores
+                Redeploy the latest deployment. Then come back here to create the first admin account. Ngopu creates its tables and demo stores
                 automatically.
               </li>
             </ol>

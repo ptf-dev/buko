@@ -1,7 +1,7 @@
 import type { Location } from './types'
 
-/** App-wide settings. Change these to launch Buko in a different city. */
-export const APP_NAME = 'Buko'
+/** App-wide settings. Change these to launch Ngopu in a different city. */
+export const APP_NAME = 'Ngopu'
 
 export const CURRENCY = {
   code: 'ALL',
@@ -33,6 +33,6 @@ export const APP_STORE_URL: string = ''
 export const PLAY_STORE_URL: string = ''
 
 /** Direct Android download offered on the landing page while the Play Store listing is pending. */
-export const ANDROID_APK_PATH = '/downloads/buko.apk'
+export const ANDROID_APK_PATH = '/downloads/ngopu.apk'
 
 export const RADIUS_OPTIONS_KM = [1, 2, 5, 10, 20]

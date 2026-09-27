@@ -12,11 +12,11 @@ The customer app also ships as Android and iOS apps through a Capacitor wrapper 
 
 - **Customers** in Tirana who want good food cheaply and like the idea of cutting waste. They browse on their phones, reserve a Surprise Bag, and collect it at the store during a short pickup window, often on the way home.
 - **Partner stores**: bakeries, restaurants, cafés, supermarkets, greengrocers and similar shops with unsold food at the end of the day. Staff use the dashboard at the counter or back office: set today's bag count and details, see who is coming, check pickup codes.
-- **Buko ops team**: a small team of admins, all with the same full access. They review store applications, approve or suspend partners, and watch platform activity.
+- **Ngopu ops team**: a small team of admins, all with the same full access. They review store applications, approve or suspend partners, and watch platform activity.
 
 ## Product Purpose
 
-Buko connects stores that have surplus food with people nearby who will buy it at about a third of the price, so less food is thrown away. Success means bags get rescued: stores list surplus daily, customers reserve and collect, and both come back.
+Ngopu connects stores that have surplus food with people nearby who will buy it at about a third of the price, so less food is thrown away. Success means bags get rescued: stores list surplus daily, customers reserve and collect, and both come back.
 
 ## Positioning
 
@@ -40,7 +40,8 @@ A local Too Good To Go for Tirana, priced in Lek, with Albanian partner stores. 
 
 ## Brand Commitments
 
-- Name: **Buko**, with the wordmark "buko." and a yellow dot.
+- Name: **Ngopu** (Albanian, "eat your fill"). Previously called Buko. The wordmark is always lowercase "ngopu." with a yellow dot, next to the shopping-bag icon.
+- **Stay clearly distinct from NGOP Media / NGOP.TV**, an existing Albanian comedy and video-production brand (@ngopmedia). Never write the name as "NGOP" or all caps, never shorten it to "Ngop", and avoid media, TV, video or comedy styling. Ngopu is always framed around food, saving food and local stores.
 - Brand colours already in use: teal `#00615f` (primary), dark teal `#00403e`, mint `#b9e4d4`, sun yellow `#ffc94d`, cream `#faf6ef`.
 - The user asked for the landing page to feel "app style / Apple-like".
 

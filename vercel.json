@@ -35,6 +35,10 @@
     {
       "source": "/app/partner",
       "destination": "/dashboard"
+    },
+    {
+      "source": "/downloads/buko.apk",
+      "destination": "/downloads/ngopu.apk"
     }
   ],
   "headers": [

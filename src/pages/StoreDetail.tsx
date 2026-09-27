@@ -40,7 +40,7 @@ export function StoreDetail() {
       <EmptyState
         icon={<ShoppingBag className="h-9 w-9" />}
         title="Store not found"
-        text="This store may no longer be on Buko."
+        text="This store may no longer be on Ngopu."
         action={<Button onClick={() => navigate('/')}>Back to Discover</Button>}
       />
     )
@@ -56,7 +56,7 @@ export function StoreDetail() {
   const share = async () => {
     const result = await shareContent({
       title: store.name,
-      text: `${bag.title} at ${store.name} on Buko`,
+      text: `${bag.title} at ${store.name} on Ngopu`,
       url: publicUrl(`/store/${store.id}`),
     })
     if (result === 'copied') {

@@ -43,7 +43,7 @@ function AdminArea() {
   if (!user) return <Navigate to="/login" replace />
   if (user.role !== 'admin') return <Navigate to="/" replace />
   return (
-    <Shell nav={adminNav(overview.data?.counts.pending ?? 0)} context="Buko admin">
+    <Shell nav={adminNav(overview.data?.counts.pending ?? 0)} context="Ngopu admin">
       <Outlet />
     </Shell>
   )

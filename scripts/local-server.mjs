@@ -42,4 +42,4 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404).end('Not found')
   }
-}).listen(PORT, () => console.log(`Buko running on http://localhost:${PORT}`))
+}).listen(PORT, () => console.log(`Ngopu running on http://localhost:${PORT}`))

@@ -161,6 +161,8 @@ export function ensureSchema() {
         await client.query(SCHEMA)
         const { rows } = await client.query('select count(*)::int as n from stores')
         if (rows[0].n === 0) await seedStores(client)
+        // One-off rename: demo reviews seeded before the Buko → Ngopu rebrand.
+        await client.query(`update stores set reviews = replace(reviews::text, 'Buko', 'Ngopu')::jsonb where reviews::text like '%Buko%'`)
       } finally {
         await client.query('select pg_advisory_unlock(4242)').catch(() => {})
         client.release()

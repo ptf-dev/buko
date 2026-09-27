@@ -174,13 +174,13 @@ export function PartnerToday() {
             <div className="min-w-[200px] flex-1 space-y-3 sm:max-w-xs">
               <label className="flex items-center justify-between gap-3 rounded-xl bg-cream px-4 py-3">
                 <span>
-                  <span className="block text-sm font-semibold">{bag.paused ? 'Paused' : 'Selling on Buko'}</span>
+                  <span className="block text-sm font-semibold">{bag.paused ? 'Paused' : 'Selling on Ngopu'}</span>
                   <span className="block text-xs text-muted">{bag.paused ? 'Customers see you as sold out' : 'Customers can reserve now'}</span>
                 </span>
                 <Switch
                   checked={!bag.paused}
                   disabled={saving}
-                  label="Selling on Buko"
+                  label="Selling on Ngopu"
                   onChange={(on) => patch({ paused: !on }, on ? 'Your bags are live again' : 'Selling paused')}
                 />
               </label>
@@ -270,7 +270,7 @@ export function PartnerToday() {
         {last14 ? (
           <BarChart data={series.map((d) => ({ key: d.day, label: shortDay(d.day), value: d.bags }))} format={(v) => String(Math.round(v))} unit="Bags" />
         ) : (
-          <Empty icon={<Star className="h-6 w-6" />} title="Your chart starts with your first order" text="Every bag you sell through Buko shows up here, day by day." />
+          <Empty icon={<Star className="h-6 w-6" />} title="Your chart starts with your first order" text="Every bag you sell through Ngopu shows up here, day by day." />
         )}
       </Panel>
     </>
@@ -357,7 +357,7 @@ export function BagEditor({ store, onSaved, save }: { store: ManagedStore; onSav
               {(id, hint) => <Input id={id} aria-describedby={hint} inputMode="numeric" suffix="L" value={form.originalPrice} onChange={set('originalPrice')} />}
             </Field>
             <Field
-              label="Buko price"
+              label="Ngopu price"
               error={priceError}
               hint={!priceError && price > 0 && original > 0 ? `${discountPercent(price, original)}% off. Most stores price at about a third.` : undefined}
             >
@@ -688,7 +688,7 @@ export function PartnerStore() {
         onSaved={(store) => setData({ ...data, store })}
         extra={
           <p className="text-sm text-muted">
-            Login email: <span className="font-medium text-ink">{data.store.contactEmail}</span>. To change it, contact the Buko team.
+            Login email: <span className="font-medium text-ink">{data.store.contactEmail}</span>. To change it, contact the Ngopu team.
           </p>
         }
       />

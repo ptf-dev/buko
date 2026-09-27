@@ -1,6 +1,6 @@
-# Buko
+# Ngopu
 
-Rescue delicious unsold food from local stores at a third of the price. Buko is a mobile-first web app modelled on Too Good To Go: stores list end-of-day **Surprise Bags**, customers reserve and pay in the app, then collect in the store's pickup window.
+Rescue delicious unsold food from local stores at a third of the price. Ngopu is a mobile-first web app modelled on Too Good To Go: stores list end-of-day **Surprise Bags**, customers reserve and pay in the app, then collect in the store's pickup window.
 
 ## Features
 
@@ -15,7 +15,7 @@ Rescue delicious unsold food from local stores at a third of the price. Buko is 
 - **Favourites**
 - **Profile**: impact stats (meals saved, money saved, CO₂e avoided), levels, notifications, diet preferences, invite friends, reset demo data
 
-**Buko for Business** (`/partner`)
+**Ngopu for Business** (`/partner`)
 - Set how many bags are available today
 - Validate a customer's pickup code at the counter
 - See reservations, collected bags and revenue
@@ -63,7 +63,7 @@ Live at **https://buko-five.vercel.app**:
 - `/app` is the web app (`index.html`, `src/App.tsx`).
 - `/dashboard` is the partner & admin dashboard.
 - `/api/*` is the backend.
-- `/downloads/buko.apk` is the Android beta download.
+- `/downloads/ngopu.apk` is the Android beta download.
 
 `npm run build:web` builds both pages and arranges them for Vercel (`scripts/web-layout.mjs`, `vercel.json`). Store links, the landing URL and the web app URL are set in `src/config.ts`. Until `APP_STORE_URL` / `PLAY_STORE_URL` are filled in, the landing page shows "Coming soon" for iPhone and offers the APK for Android. Screenshots used on the landing page are in `public/landing/`.
 
@@ -86,12 +86,12 @@ npm run build:web # production build laid out for the website (landing + /app)
 
 ## Native apps (Android & iOS)
 
-The web app is wrapped with [Capacitor](https://capacitorjs.com). The native projects are in `android/` and `ios/`. App id is `al.buko.app`. The native builds use the device's location permission, system share sheet, status bar and a Buko splash screen and icon (sources are in `assets/`).
+The web app is wrapped with [Capacitor](https://capacitorjs.com). The native projects are in `android/` and `ios/`. App id is `al.buko.app`. The native builds use the device's location permission, system share sheet, status bar and a Ngopu splash screen and icon (sources are in `assets/`).
 
 ```bash
 npm run cap:sync        # build the app + copy into native projects (run after every change)
 npm run android:apk     # build android/app/build/outputs/apk/debug/app-debug.apk
-                        # (copy it to public/downloads/buko.apk to update the website download)
+                        # (copy it to public/downloads/ngopu.apk to update the website download)
 npm run android:open    # open in Android Studio (run on emulator / device)
 npm run ios:open        # open in Xcode (macOS only)
 ```

@@ -314,7 +314,7 @@ async function setup({ body, secure }) {
   await tx(async (c) => {
     await c.query('lock table users in exclusive mode')
     const { rows } = await c.query(`select 1 from users where role = 'admin' limit 1`)
-    if (rows[0]) throw new HttpError(409, 'Buko is already set up. Log in instead.')
+    if (rows[0]) throw new HttpError(409, 'Ngopu is already set up. Log in instead.')
     await c.query(`insert into users (id, email, name, password_hash, role) values ($1,$2,$3,$4,'admin')`, [id, mail, name, hash])
   })
   const cookie = await createSession(id, secure)
@@ -449,7 +449,7 @@ async function partnerStore(user) {
 /** @param {import('./auth.js').SessionUser} user */
 function requireActive(user) {
   if (user.storeStatus !== 'active')
-    throw new HttpError(403, user.storeStatus === 'pending' ? 'Your store is still under review.' : 'Your store is not active. Contact the Buko team.')
+    throw new HttpError(403, user.storeStatus === 'pending' ? 'Your store is still under review.' : 'Your store is not active. Contact the Ngopu team.')
 }
 
 /** @type {Handler} */

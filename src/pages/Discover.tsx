@@ -137,7 +137,7 @@ export function Discover() {
           <Carousel title="Collect now" listings={collectNow} now={now} onSeeAll={() => browseWith({ day: 'today', sortBy: 'distance' })} />
           <Carousel title="Recommended for you" listings={byRating.slice(0, 8)} now={now} onSeeAll={() => browseWith({ sortBy: 'rating' })} />
           <Carousel title="Save before it’s too late" listings={lastChance} now={now} />
-          <Carousel title="New on Buko" listings={newOnes} now={now} />
+          <Carousel title="New on Ngopu" listings={newOnes} now={now} />
           <Carousel title="Nearby" listings={nearest} now={now} onSeeAll={() => browseWith({ sortBy: 'distance' })} />
           <Carousel title="Meals" listings={byCategory('meals')} now={now} onSeeAll={() => browseWith({ categories: ['meals'] })} />
           <Carousel title="Bread & pastries" listings={byCategory('bakery')} now={now} onSeeAll={() => browseWith({ categories: ['bakery'] })} />

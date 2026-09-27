@@ -68,7 +68,7 @@ function Logo({ light = false }: { light?: boolean }) {
     <a href="/" className={`flex items-center gap-2 text-2xl font-black tracking-tight ${light ? 'text-white' : 'text-brand'}`}>
       <img src="/favicon.svg" alt="" className="h-8 w-8" />
       <span>
-        buko<span className="text-sun">.</span>
+        ngopu<span className="text-sun">.</span>
       </span>
     </a>
   )
@@ -138,7 +138,7 @@ function StoreBadge({
   )
   if (disabled || !href) return <span className={cls} aria-disabled>{content}</span>
   return (
-    <a href={href} className={cls} {...(download ? { download: 'buko.apk' } : {})}>
+    <a href={href} className={cls} {...(download ? { download: 'ngopu.apk' } : {})}>
       {content}
     </a>
   )
@@ -175,7 +175,7 @@ function GetTheApp({ platform, dark = true, center = false }: { platform: Platfo
       {platform === 'ios' && !APP_STORE_URL && (
         <p className={`max-w-sm text-center text-xs lg:text-left ${dark ? 'text-muted' : 'text-mint'}`}>
           On iPhone? Open the web app, tap <span className="font-semibold">Share</span> →{' '}
-          <span className="font-semibold">Add to Home Screen</span> and Buko works just like an app.
+          <span className="font-semibold">Add to Home Screen</span> and Ngopu works just like an app.
         </p>
       )}
     </div>
@@ -298,7 +298,7 @@ function Hero({ platform }: { platform: Platform }) {
         </div>
 
         <Reveal delay={200} className="relative mx-auto h-[560px] w-full max-w-[460px] sm:h-[640px]">
-          <Phone src="/landing/store.jpg" alt="A bakery's Surprise Bag in the Buko app" className="absolute top-16 left-0 w-[46%] -rotate-6 opacity-95" />
+          <Phone src="/landing/store.jpg" alt="A bakery's Surprise Bag in the Ngopu app" className="absolute top-16 left-0 w-[46%] -rotate-6 opacity-95" />
           <Phone src="/landing/reserved.jpg" alt="Reservation confirmed with pickup code" className="absolute top-16 right-0 w-[46%] rotate-6 opacity-95" />
           <Phone src="/landing/discover.jpg" alt="Discover surprise bags near you" priority className="absolute top-0 left-1/2 z-10 w-[56%] -translate-x-1/2" />
           <FloatingChip className="animate-float top-24 -left-2 sm:left-0">
@@ -321,7 +321,7 @@ const CATEGORIES = ['🥐 Bakeries', '🍣 Sushi', '🥗 Salad bars', '🍕 Pizz
 function Marquee() {
   const items = [...CATEGORIES, ...CATEGORIES]
   return (
-    <section aria-label="Types of stores on Buko" className="overflow-hidden border-y border-line bg-cream py-5">
+    <section aria-label="Types of stores on Ngopu" className="overflow-hidden border-y border-line bg-cream py-5">
       <div className="animate-marquee flex w-max gap-10 text-lg font-semibold whitespace-nowrap text-ink/70">
         {items.map((c, i) => (
           <span key={i}>{c}</span>
@@ -499,7 +499,7 @@ function Impact() {
             </h2>
             <p className="mt-5 text-lg text-mint sm:text-xl">
               Food waste is responsible for around 8–10% of global greenhouse gas emissions. When you rescue a bag, that food
-              gets eaten instead of binned — and Buko keeps count.
+              gets eaten instead of binned — and Ngopu keeps count.
             </p>
           </Reveal>
           <div className="mt-10 grid grid-cols-3 gap-4">
@@ -516,7 +516,7 @@ function Impact() {
           </div>
         </div>
         <Reveal delay={150} className="flex justify-center">
-          <Phone src="/landing/profile.jpg" alt="Your impact in the Buko app" className="w-[290px]" />
+          <Phone src="/landing/profile.jpg" alt="Your impact in the Ngopu app" className="w-[290px]" />
         </Reveal>
       </div>
     </section>
@@ -553,7 +553,7 @@ function ForStores() {
           <Reveal>
             <h2 className="text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl">Own a bakery, café or shop?</h2>
             <p className="mt-5 text-lg text-muted sm:text-xl">
-              Join Buko as a launch partner. Apply in two minutes; once we approve your store, you list your unsold food from your own dashboard and the neighbourhood rescues it.
+              Join Ngopu as a launch partner. Apply in two minutes; once we approve your store, you list your unsold food from your own dashboard and the neighbourhood rescues it.
             </p>
             <a
               href="/dashboard/apply"
@@ -592,7 +592,7 @@ const FAQS = [
   },
   {
     q: 'Is there an iPhone and Android app?',
-    a: 'Buko works right now in any browser. The Android beta can be downloaded from this page, and the iPhone app is coming to the App Store soon.',
+    a: 'Ngopu works right now in any browser. The Android beta can be downloaded from this page, and the iPhone app is coming to the App Store soon.',
   },
 ]
 
@@ -651,7 +651,7 @@ function FinalCTA({ platform }: { platform: Platform }) {
             <div className="rounded-2xl bg-white p-3">
               <QR url={`${LANDING_URL}${WEB_APP}`} />
             </div>
-            <p className="max-w-[12rem] text-left text-mint">Scan with your phone camera to open Buko on your phone.</p>
+            <p className="max-w-[12rem] text-left text-mint">Scan with your phone camera to open Ngopu on your phone.</p>
           </Reveal>
         )}
       </div>
@@ -665,7 +665,10 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 md:flex-row md:items-start md:justify-between">
         <div>
           <Logo light />
-          <p className="mt-3 max-w-xs text-sm">Fight food waste, one bag at a time. Made with care in Tirana.</p>
+          <p className="mt-3 max-w-xs text-sm">
+            <span className="font-semibold text-white">ngopu</span> <span className="italic">(Albanian)</span>: eat your fill. Fight food waste, one
+            bag at a time. Made with care in Tirana.
+          </p>
         </div>
         <div className="grid grid-cols-2 gap-10 text-sm sm:grid-cols-3">
           <div>
@@ -694,7 +697,7 @@ function Footer() {
         </div>
       </div>
       <div className="mx-auto mt-12 flex max-w-6xl flex-col gap-2 border-t border-white/10 px-5 pt-6 text-xs sm:flex-row sm:justify-between">
-        <p>© {new Date().getFullYear()} Buko. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} Ngopu. All rights reserved.</p>
         <p className="flex items-center gap-1.5">
           <Globe className="h-3.5 w-3.5" /> English · Tirana, Albania
         </p>

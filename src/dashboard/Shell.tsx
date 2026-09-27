@@ -34,7 +34,7 @@ function Wordmark() {
     <span className="flex items-center gap-2 text-xl font-black tracking-tight text-brand">
       <img src="/favicon.svg" alt="" className="h-7 w-7" />
       <span>
-        buko<span className="text-sun">.</span>
+        ngopu<span className="text-sun">.</span>
       </span>
     </span>
   )
@@ -153,7 +153,7 @@ export function AuthLayout({ children, wide = false }: { children: ReactNode; wi
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="flex h-16 items-center justify-between px-5 sm:px-8">
-        <a href="/" aria-label="Buko home">
+        <a href="/" aria-label="Ngopu home">
           <Wordmark />
         </a>
         <a href="/app" className="text-sm font-medium text-muted hover:text-ink">

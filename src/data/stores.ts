@@ -336,7 +336,7 @@ export const SEED_STORES: Store[] = [
     ratingCount: 980,
     highlights: ['Great quality', 'Great value', 'Friendly staff'],
     reviews: [
-      { author: 'Olsi', rating: 5, text: 'Best byrek in town and so cheap through Buko.' },
+      { author: 'Olsi', rating: 5, text: 'Best byrek in town and so cheap through Ngopu.' },
       { author: 'Xhesi', rating: 5, text: 'Spinach, cheese and meat byrek. All perfect.' },
     ],
     bag: {

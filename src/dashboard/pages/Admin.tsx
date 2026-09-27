@@ -229,7 +229,7 @@ export function AdminPartners() {
 
   return (
     <>
-      <PageTitle title="Partners" subtitle="Every store on Buko: review applications, check performance, suspend or reactivate." />
+      <PageTitle title="Partners" subtitle="Every store on Ngopu: review applications, check performance, suspend or reactivate." />
       <Panel
         title={
           <Segmented
@@ -588,7 +588,7 @@ export function AdminTeam() {
 
   return (
     <>
-      <PageTitle title="Team & settings" subtitle="Everyone on the Buko team has the same full access." />
+      <PageTitle title="Team & settings" subtitle="Everyone on the Ngopu team has the same full access." />
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="Admins">
           {loading ? (

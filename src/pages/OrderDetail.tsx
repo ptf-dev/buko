@@ -66,10 +66,10 @@ export function OrderDetail() {
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
       'BEGIN:VEVENT',
-      `UID:${order.id}@buko`,
+      `UID:${order.id}@ngopu`,
       `DTSTART:${toIcsDate(order.pickupStart)}`,
       `DTEND:${toIcsDate(order.pickupEnd)}`,
-      `SUMMARY:Pick up Buko bag at ${store.name}`,
+      `SUMMARY:Pick up Ngopu bag at ${store.name}`,
       `LOCATION:${store.address}`,
       `DESCRIPTION:Pickup code ${order.pickupCode}`,
       'END:VEVENT',
@@ -216,7 +216,7 @@ export function OrderDetail() {
           <Navigation className="h-5 w-5 text-brand" />
         </a>
         {order.status === 'reserved' && !missed && !isNative && (
-          <a href={calendarHref} download={`buko-${order.pickupCode}.ics`} className="flex items-center gap-3 font-medium text-brand">
+          <a href={calendarHref} download={`ngopu-${order.pickupCode}.ics`} className="flex items-center gap-3 font-medium text-brand">
             <CalendarPlus className="h-5 w-5" /> Add pickup to calendar
           </a>
         )}

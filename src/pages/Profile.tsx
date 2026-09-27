@@ -111,10 +111,10 @@ export function Profile() {
           <span className="text-muted">
             <Store className="h-5 w-5" />
           </span>
-          <span className="flex-1 font-medium">Buko for Business</span>
+          <span className="flex-1 font-medium">Ngopu for Business</span>
           <ChevronRight className="h-5 w-5 text-muted" />
         </a>
-        <MenuLink icon={<CircleHelp className="h-5 w-5" />} label="How Buko works" to="/welcome" />
+        <MenuLink icon={<CircleHelp className="h-5 w-5" />} label="How Ngopu works" to="/welcome" />
         <MenuButton icon={<RotateCcw className="h-5 w-5" />} label="Reset demo data" onClick={() => setResetOpen(true)} />
       </section>
 
