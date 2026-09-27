@@ -29,6 +29,25 @@
   ],
   "redirects": [
     {
+      "source": "/((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "buko-five.vercel.app"
+        }
+      ],
+      "destination": "https://www.ngopu.app/$1",
+      "permanent": true
+    },
+    {
+      "source": "/web",
+      "destination": "/app"
+    },
+    {
+      "source": "/web/:path*",
+      "destination": "/app/:path*"
+    },
+    {
       "source": "/store/:id",
       "destination": "/app/store/:id"
     },
