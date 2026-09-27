@@ -48,6 +48,9 @@ export const ANDROID_APK_PATH = '/downloads/ngopu.apk'
  * Map tiles. OpenStreetMap's public servers are fine for launch-scale traffic; for heavier use
  * switch to a keyed provider (e.g. MapTiler or Stadia) by changing this one value.
  */
+/** Address search in the location sheet (Photon by komoot, OpenStreetMap data, no key needed). */
+export const GEOCODER_URL = 'https://photon.komoot.io/api/'
+
 export const MAP_TILES = {
   url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',

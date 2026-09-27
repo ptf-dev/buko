@@ -73,6 +73,13 @@ export function FiltersSheet({ open, onClose, resultCount }: { open: boolean; on
         ))}
       </Section>
       <label className="mt-5 flex items-center justify-between py-2">
+        <span>
+          <span className="block font-semibold">Available now</span>
+          <span className="block text-sm text-muted">Pickup open now or within the hour</span>
+        </span>
+        <Toggle checked={!!filters.availableNow} onChange={(v) => set({ availableNow: v })} label="Available now" />
+      </label>
+      <label className="flex items-center justify-between py-2">
         <span className="font-semibold">Hide sold-out</span>
         <Toggle checked={filters.hideSoldOut} onChange={(v) => set({ hideSoldOut: v })} label="Hide sold-out" />
       </label>

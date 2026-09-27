@@ -14,7 +14,11 @@ export interface AppState {
   profile: UserProfile
   filters: Filters
   paymentMethod: PaymentMethod
+  /** Saved places in the location sheet. Kept on the device only. */
+  places?: Partial<Record<SavedPlace, Location>>
 }
+
+export type SavedPlace = 'home' | 'work'
 
 export const STATE_VERSION = 1
 
@@ -35,6 +39,7 @@ export function initialState(): AppState {
 export type Action =
   | { type: 'completeOnboarding'; name: string; location: Location }
   | { type: 'setLocation'; location: Location }
+  | { type: 'savePlace'; place: SavedPlace; location: Location | null }
   | { type: 'toggleFavourite'; storeId: string }
   | { type: 'setFilters'; filters: Partial<Filters> }
   | { type: 'resetFilters' }
@@ -73,6 +78,12 @@ export function reducer(state: AppState, action: Action): AppState {
       }
     case 'setLocation':
       return { ...state, location: action.location }
+    case 'savePlace': {
+      const places = { ...state.places }
+      if (action.location) places[action.place] = action.location
+      else delete places[action.place]
+      return { ...state, places }
+    }
     case 'toggleFavourite': {
       const has = state.favourites.includes(action.storeId)
       return {

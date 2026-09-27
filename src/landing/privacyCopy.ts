@@ -41,7 +41,7 @@ const sq: { title: string; intro: string; updated: string; back: string; content
         'Një ankesë që dërgon për një çantë (arsyeja dhe përshkrimi yt), si dhe vendimi dhe rimbursimi. Dyqani sheh ankesën, por jo emailin tënd.',
       ],
       after: [
-        'Këto qëndrojnë vetëm në pajisjen tënde dhe nuk dërgohen te ne: preferencat e dietës, të preferuarat dhe zona që zgjedh.',
+        'Këto qëndrojnë vetëm në pajisjen tënde dhe nuk dërgohen te ne: preferencat e dietës, të preferuarat, zona që zgjedh dhe vendet e ruajtura (Shtëpia, Puna).',
         'Vendndodhja: nëse e lejon, pajisja e përdor vendndodhjen për të treguar dyqanet pranë teje. Llogaritja bëhet në pajisje dhe vendndodhja jote nuk dërgohet në serverët tanë.',
         'Pagesat: gjatë fazës beta pagesat janë simuluar dhe nuk mbledhim të dhëna karte. Kur të nisin pagesat e vërteta, ato do të përpunohen nga një ofrues pagesash dhe kjo politikë do të përditësohet para se të ndodhë.',
       ],
@@ -52,7 +52,7 @@ const sq: { title: string; intro: string; updated: string; back: string; content
       paragraphs: ['Kur një dyqan aplikon ose përdor panelin, ruajmë:'],
       bullets: [
         'Emrin e personit të kontaktit, emailin, numrin e telefonit (opsional) dhe mesazhin e aplikimit.',
-        'Të dhënat e dyqanit: emrin, llojin, adresën, vendndodhjen në hartë dhe informacionin e Çantës Surprizë. Këto shfaqen publikisht në aplikacion pasi dyqani miratohet.',
+        'Të dhënat e dyqanit: emrin, llojin, adresën, vendndodhjen në hartë, foton e dyqanit dhe informacionin e Çantës Surprizë. Këto shfaqen publikisht në aplikacion pasi dyqani miratohet.',
         'Fjalëkalimin, vetëm në formë të enkriptuar në mënyrë të pakthyeshme (scrypt). Ne nuk e shohim dot fjalëkalimin tënd.',
         'Të dhënat për pagesat: emrin ligjor të biznesit, NIPT-in dhe IBAN-in, shitjet, komisionet, pagesat e bëra dhe faturat, të cilat ruhen sa kërkon ligji për kontabilitetin.',
         'Kohën e hyrjeve të fundit dhe një cookie sesioni që të mban të kyçur.',
@@ -83,6 +83,7 @@ const sq: { title: string; intro: string; updated: string; back: string; content
         'Vercel: hostimi i faqes dhe i serverit.',
         'Neon: baza e të dhënave (Postgres).',
         'OpenStreetMap: pllakat e hartës. Serverët e tyre marrin adresën IP të pajisjes kur ngarkohet harta.',
+        'Photon (komoot): kërkimi i adresave te zgjedhja e vendndodhjes. Merr tekstin që shkruan dhe adresën IP, vetëm kur kërkon një adresë.',
         'Google Fonts: shkronjat e faqes. Google merr adresën IP kur ngarkohen shkronjat.',
       ],
       after: ['Disa nga këta ofrues mund t’i përpunojnë të dhënat jashtë Shqipërisë, me masat mbrojtëse që kërkon ligji.'],
@@ -161,7 +162,7 @@ const en: typeof sq = {
         'A complaint you send about a bag (the reason and your description), and the decision and any refund. The store sees the complaint, not your email.',
       ],
       after: [
-        'These stay only on your device and are not sent to us: diet preferences, favourites and the area you choose.',
+        'These stay only on your device and are not sent to us: diet preferences, favourites, the area you choose and saved places (Home, Work).',
         'Location: if you allow it, your device uses your location to show nearby stores. The calculation happens on the device and your location is not sent to our servers.',
         'Payments: during the beta, payments are simulated and we collect no card data. When real payments start, they will be handled by a payment provider and this policy will be updated before that happens.',
       ],
@@ -172,7 +173,7 @@ const en: typeof sq = {
       paragraphs: ['When a store applies or uses the dashboard, we store:'],
       bullets: [
         'The contact person’s name, email, phone number (optional) and application message.',
-        'Store details: name, type, address, map location and Surprise Bag information. These are shown publicly in the app once the store is approved.',
+        'Store details: name, type, address, map location, store photo and Surprise Bag information. These are shown publicly in the app once the store is approved.',
         'The password, only as a one-way hash (scrypt). We can’t see your password.',
         'Payout details: the business’s legal name, NIPT and IBAN, plus sales, commission, payouts and invoices, kept as long as accounting law requires.',
         'Recent login times and a session cookie that keeps you signed in.',
@@ -203,6 +204,7 @@ const en: typeof sq = {
         'Vercel: website and server hosting.',
         'Neon: database (Postgres).',
         'OpenStreetMap: map tiles. Their servers receive your device’s IP address when the map loads.',
+        'Photon (komoot): address search in the location picker. It receives the text you type and your IP address, only when you search for an address.',
         'Google Fonts: website fonts. Google receives your IP address when fonts load.',
       ],
       after: ['Some of these providers may process data outside Albania, with the safeguards required by law.'],

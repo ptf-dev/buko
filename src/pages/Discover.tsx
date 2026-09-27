@@ -1,14 +1,13 @@
-import { ChevronRight, Leaf, Search } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Leaf, Search } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { BagCard } from '../components/BagCard'
 import { LocationButton } from '../components/LocationButton'
 import { OutOfAreaNotice } from '../components/OutOfAreaNotice'
 import { EmptyState } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories'
-import { formatPrice, isCollectSoon } from '../lib/format'
+import { isCollectSoon } from '../lib/format'
 import type { Listing } from '../lib/search'
-import { computeImpact } from '../state/reducer'
 import { useAppState, useDispatch, useNow } from '../state/store'
 import { useListings } from '../state/useListings'
 import type { Category } from '../types'
@@ -27,16 +26,16 @@ function Carousel({
 }) {
   if (!listings.length) return null
   return (
-    <section className="mt-6">
-      <div className="mb-2 flex items-center justify-between px-4">
-        <h2 className="text-lg font-bold">{title}</h2>
+    <section className="mt-7">
+      <div className="mb-3 flex items-baseline justify-between gap-3 px-4">
+        <h2 className="truncate text-[22px] leading-tight font-bold tracking-tight text-ink">{title}</h2>
         {onSeeAll && (
-          <button type="button" onClick={onSeeAll} className="flex items-center text-sm font-semibold text-brand">
-            See all <ChevronRight className="h-4 w-4" />
+          <button type="button" onClick={onSeeAll} className="shrink-0 text-[15px] font-medium text-brand underline underline-offset-4">
+            See all
           </button>
         )}
       </div>
-      <div className="no-scrollbar flex snap-x gap-3 overflow-x-auto px-4 pb-1">
+      <div className="no-scrollbar flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
         {listings.map((l) => (
           <BagCard key={l.store.id} listing={l} now={now} />
         ))}
@@ -45,14 +44,20 @@ function Carousel({
   )
 }
 
+/** Category tiles, with "Collect now" in the middle like the original app. */
+const TILES: { key: Category | 'now'; label: string; image: string }[] = [
+  ...CATEGORY_ORDER.slice(0, 3).map((c) => ({ key: c, label: CATEGORIES[c].label, image: CATEGORIES[c].image })),
+  { key: 'now', label: 'Collect now', image: '/img/3d/now.png' },
+  ...CATEGORY_ORDER.slice(3).map((c) => ({ key: c, label: CATEGORIES[c].label, image: CATEGORIES[c].image })),
+]
+
 export function Discover() {
   const now = useNow()
-  const { profile, favourites, orders } = useAppState()
+  const { favourites } = useAppState()
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const { all, nearby } = useListings(now)
   const available = nearby.filter((l) => l.store.bag.quantity > 0)
-  const impact = computeImpact(orders)
 
   const browseWith = (filters: Partial<typeof DEFAULT_FILTERS>) => {
     dispatch({ type: 'setFilters', filters: { ...DEFAULT_FILTERS, ...filters } })
@@ -72,60 +77,25 @@ export function Discover() {
 
   return (
     <div className="pb-8">
-      <header className="bg-white px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <LocationButton />
-          <Link
-            to="/profile"
-            aria-label="Your impact"
-            className="flex shrink-0 items-center gap-1 rounded-full bg-brand-light px-3 py-1.5 text-sm font-semibold text-brand"
-          >
-            <Leaf className="h-4 w-4" /> {impact.bagsSaved}
-          </Link>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate('/browse?focus=1')}
-          className="mt-3 flex h-11 w-full items-center gap-2 rounded-full bg-cream px-4 text-left text-muted"
-        >
-          <Search className="h-5 w-5" /> Search stores and food
-        </button>
+      <header className="sticky top-0 z-20 border-b border-line/70 bg-white/95 px-4 pt-[calc(env(safe-area-inset-top)+14px)] pb-3 backdrop-blur">
+        <LocationButton />
       </header>
 
-      <OutOfAreaNotice listings={all} className="mx-4 mb-4" />
-      <div className="bg-white px-4 pb-4">
-        <div className="relative overflow-hidden rounded-2xl bg-brand p-4 text-white">
-          <p className="text-sm text-mint">{profile.name ? `Hi ${profile.name}!` : 'Hi there!'}</p>
-          <p className="mt-1 text-xl leading-tight font-bold">
-            {available.length} surprise bags waiting to be rescued near you
-          </p>
-          <p className="mt-1 text-sm text-mint">
-            {impact.moneySaved > 0
-              ? `You’ve saved ${formatPrice(impact.moneySaved)} so far.`
-              : 'Great food, a third of the price. Good for the planet.'}
-          </p>
-          <Leaf className="absolute -right-4 -bottom-6 h-28 w-28 text-white/10" />
-        </div>
-      </div>
+      <OutOfAreaNotice listings={all} className="mx-4 mt-4" />
 
-      <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto px-4">
-        {CATEGORY_ORDER.map((c) => {
-          const Icon = CATEGORIES[c].icon
-          return (
-            <button
-              key={c}
-              type="button"
-              onClick={() => browseWith({ categories: [c] })}
-              className="flex w-20 shrink-0 flex-col items-center gap-1.5"
-            >
-              <span className={`flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br ${CATEGORIES[c].gradient}`}>
-                <Icon className="h-6 w-6 text-ink" />
-              </span>
-              <span className="text-center text-xs leading-tight font-medium">{CATEGORIES[c].label}</span>
-            </button>
-          )
-        })}
-      </div>
+      <nav aria-label="Categories" className="no-scrollbar mt-4 flex gap-1 overflow-x-auto px-2">
+        {TILES.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => (t.key === 'now' ? browseWith({ availableNow: true, sortBy: 'distance' }) : browseWith({ categories: [t.key] }))}
+            className="flex w-[92px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-1 pt-1 pb-2 transition active:scale-95"
+          >
+            <img src={t.image} alt="" className="h-[72px] w-[72px] object-contain drop-shadow-[0_6px_8px_rgba(0,0,0,0.12)]" />
+            <span className="text-center text-[14px] leading-tight font-medium text-ink">{t.label}</span>
+          </button>
+        ))}
+      </nav>
 
       {nearby.length === 0 ? (
         <EmptyState
@@ -136,8 +106,8 @@ export function Discover() {
       ) : (
         <>
           <Carousel title="Your favourites" listings={favs} now={now} onSeeAll={() => navigate('/favourites')} />
-          <Carousel title="Collect now" listings={collectNow} now={now} onSeeAll={() => browseWith({ day: 'today', sortBy: 'distance' })} />
-          <Carousel title="Recommended for you" listings={byRating.slice(0, 8)} now={now} onSeeAll={() => browseWith({ sortBy: 'rating' })} />
+          <Carousel title="Popular near you" listings={byRating.slice(0, 8)} now={now} onSeeAll={() => browseWith({ sortBy: 'rating' })} />
+          <Carousel title="Collect now" listings={collectNow} now={now} onSeeAll={() => browseWith({ availableNow: true, sortBy: 'distance' })} />
           <Carousel title="Save before it’s too late" listings={lastChance} now={now} />
           <Carousel title="New on Ngopu" listings={newOnes} now={now} />
           <Carousel title="Nearby" listings={nearest} now={now} onSeeAll={() => browseWith({ sortBy: 'distance' })} />

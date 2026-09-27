@@ -1,19 +1,27 @@
 import { CATEGORIES, logoColor } from '../data/categories'
+import { assetUrl } from '../lib/api'
 import { initials } from '../lib/format'
 import type { Store } from '../types'
 
-/** Illustrated cover for a store's surprise bag (stands in for store photos). */
-export function BagArt({ store, className = '' }: { store: Store; className?: string }) {
+/**
+ * Cover image for a store's surprise bag: the store's own photo, or a 3D illustration of its category on a
+ * soft background. `shade` darkens the bottom for text laid over the image.
+ */
+export function BagArt({ store, className = '', shade = false }: { store: Store; className?: string; shade?: boolean }) {
   const meta = CATEGORIES[store.category]
-  const Icon = meta.icon
   const soldOut = store.bag.quantity <= 0
   return (
-    <div
-      className={`relative overflow-hidden bg-gradient-to-br ${meta.gradient} ${soldOut ? 'grayscale-[60%]' : ''} ${className}`}
-    >
-      <Icon className="absolute -right-4 -bottom-6 h-32 w-32 text-white/50" strokeWidth={1.25} />
-      <Icon className="absolute top-3 left-1/3 h-10 w-10 text-white/35 rotate-12" strokeWidth={1.5} />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0" />
+    <div className={`relative overflow-hidden ${soldOut ? 'grayscale-[70%]' : ''} ${className}`} style={{ background: meta.tint }}>
+      {store.photoUrl ? (
+        <img src={assetUrl(store.photoUrl)} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <>
+          <span className="absolute -top-10 -left-8 h-40 w-40 rounded-full bg-white/45" aria-hidden />
+          <span className="absolute -right-6 -bottom-12 h-44 w-44 rounded-full bg-white/35" aria-hidden />
+          <img src={meta.image} alt="" loading="lazy" decoding="async" className="absolute top-1/2 left-1/2 h-[72%] max-h-40 -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_10px_14px_rgba(0,0,0,0.18)]" />
+        </>
+      )}
+      {shade && <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/10" />}
     </div>
   )
 }

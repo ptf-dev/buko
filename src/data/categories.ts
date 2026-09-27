@@ -6,15 +6,19 @@ export interface CategoryMeta {
   icon: LucideIcon
   /** Tailwind gradient classes for the bag artwork. */
   gradient: string
+  /** 3D illustration (Fluent Emoji, MIT) used on category tiles and as the card image when a store has no photo. */
+  image: string
+  /** Soft background behind the illustration. */
+  tint: string
 }
 
 export const CATEGORIES: Record<Category, CategoryMeta> = {
-  meals: { label: 'Meals', icon: UtensilsCrossed, gradient: 'from-orange-300 via-amber-200 to-rose-200' },
-  bakery: { label: 'Bread & pastries', icon: Croissant, gradient: 'from-amber-300 via-yellow-200 to-orange-100' },
-  groceries: { label: 'Groceries', icon: ShoppingBasket, gradient: 'from-emerald-300 via-lime-200 to-green-100' },
-  dessert: { label: 'Desserts', icon: Cake, gradient: 'from-pink-300 via-rose-200 to-fuchsia-100' },
-  drinks: { label: 'Café & drinks', icon: Coffee, gradient: 'from-stone-300 via-amber-100 to-orange-100' },
-  other: { label: 'Other', icon: Flower2, gradient: 'from-violet-300 via-purple-200 to-pink-100' },
+  meals: { label: 'Meals', icon: UtensilsCrossed, gradient: 'from-orange-300 via-amber-200 to-rose-200', image: '/img/3d/meals.png', tint: '#e8f1e4' },
+  bakery: { label: 'Bread & pastries', icon: Croissant, gradient: 'from-amber-300 via-yellow-200 to-orange-100', image: '/img/3d/bakery.png', tint: '#f7ecdc' },
+  groceries: { label: 'Groceries', icon: ShoppingBasket, gradient: 'from-emerald-300 via-lime-200 to-green-100', image: '/img/3d/groceries.png', tint: '#e3f0e6' },
+  dessert: { label: 'Desserts', icon: Cake, gradient: 'from-pink-300 via-rose-200 to-fuchsia-100', image: '/img/3d/dessert.png', tint: '#f8e6ea' },
+  drinks: { label: 'Café & drinks', icon: Coffee, gradient: 'from-stone-300 via-amber-100 to-orange-100', image: '/img/3d/drinks.png', tint: '#efe7df' },
+  other: { label: 'Other', icon: Flower2, gradient: 'from-violet-300 via-purple-200 to-pink-100', image: '/img/3d/other.png', tint: '#ece7f3' },
 }
 
 export const CATEGORY_ORDER: Category[] = ['meals', 'bakery', 'groceries', 'dessert', 'drinks', 'other']

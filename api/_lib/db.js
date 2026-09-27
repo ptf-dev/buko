@@ -384,6 +384,17 @@ const MIGRATIONS = [
         from orders where payment_method <> 'cash';
     `)
   },
+  // 4: store cover photos (small JPEG/WebP, resized in the browser before upload).
+  async (c) => {
+    await c.query(`
+      create table store_photos (
+        store_id text primary key references stores(id) on delete cascade,
+        mime text not null check (mime in ('image/jpeg','image/webp','image/png')),
+        data bytea not null,
+        updated_at timestamptz not null default now()
+      );
+    `)
+  },
 ]
 
 /** @type {Promise<void> | null} */

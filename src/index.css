@@ -109,3 +109,45 @@ body {
 .animate-pop {
   animation: pop 0.45s ease-out;
 }
+
+/* Browse map: store logo pins and clusters. */
+.logo-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 3px solid white;
+  color: white;
+  font-weight: 800;
+  font-size: 15px;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.28);
+  transform: translate(-50%, -50%);
+  transition: transform 0.15s ease;
+  background-size: cover;
+  background-position: center;
+}
+.logo-pin.off {
+  filter: grayscale(0.85);
+  opacity: 0.8;
+}
+.logo-pin.active {
+  transform: translate(-50%, -50%) scale(1.22);
+  box-shadow: 0 0 0 4px var(--color-sun), 0 4px 12px rgb(0 0 0 / 0.3);
+}
+.cluster-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--color-brand);
+  color: white;
+  font-weight: 700;
+  font-size: 17px;
+  border: 3px solid white;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.25);
+  transform: translate(-50%, -50%);
+}

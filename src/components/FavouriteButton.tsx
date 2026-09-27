@@ -1,7 +1,8 @@
 import { Heart } from 'lucide-react'
 import { useAppState, useDispatch } from '../state/store'
 
-export function FavouriteButton({ storeId, className = '' }: { storeId: string; className?: string }) {
+/** Heart toggle. `plain` is the bare icon used inside cards; the default is a round button for photos. */
+export function FavouriteButton({ storeId, className = '', plain = false }: { storeId: string; className?: string; plain?: boolean }) {
   const { favourites } = useAppState()
   const dispatch = useDispatch()
   const active = favourites.includes(storeId)
@@ -15,9 +16,11 @@ export function FavouriteButton({ storeId, className = '' }: { storeId: string; 
         e.stopPropagation()
         dispatch({ type: 'toggleFavourite', storeId })
       }}
-      className={`flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow transition active:scale-90 ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full transition active:scale-90 ${
+        plain ? '-m-1.5 h-10 w-10' : 'h-9 w-9 bg-white/95 shadow'
+      } ${className}`}
     >
-      <Heart className={`h-5 w-5 ${active ? 'fill-brand text-brand' : 'text-ink'}`} />
+      <Heart className={`${plain ? 'h-6 w-6' : 'h-5 w-5'} ${active ? 'fill-brand text-brand' : plain ? 'text-brand' : 'text-ink'}`} strokeWidth={plain ? 1.8 : 2} />
     </button>
   )
 }

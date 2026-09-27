@@ -9,6 +9,7 @@ import { discountPercent, formatMinutes, formatPrice, formatRange, isPickupNow }
 import type { Category, Diet } from '../../types'
 import { useNow } from '../../state/store'
 import { BarChart, shortDay } from '../BarChart'
+import { PhotoUpload } from '../PhotoUpload'
 import { useResource, useToast } from '../data'
 import type { DashOrder, ManagedStore, PartnerOverview } from '../types'
 import { Btn, DataTable, Delta, Dialog, Empty, ErrorState, Field, Input, Kpi, OrderBadge, PageSkeleton, PageTitle, Panel, Segmented, Select, StatusBadge, Switch, TextArea, type Column } from '../ui'
@@ -779,6 +780,7 @@ export function PartnerStore() {
           </span>
         }
       />
+      <PhotoUpload store={data.store} path="partner/photo" onSaved={(store) => setData({ ...data, store })} />
       <StoreProfileForm
         store={data.store}
         save={(body) => api<{ store: ManagedStore }>('partner/store', { method: 'PATCH', json: body }).then((r) => r.store)}

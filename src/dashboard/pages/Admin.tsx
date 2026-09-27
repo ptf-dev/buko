@@ -7,6 +7,7 @@ import { api } from '../../lib/api'
 import { formatPrice, formatRange } from '../../lib/format'
 import type { Category } from '../../types'
 import { useNow } from '../../state/store'
+import { PhotoUpload } from '../PhotoUpload'
 import { StoreMoneyPanel } from './Finance'
 import { BarChart, shortDay } from '../BarChart'
 import { useAuth, useResource, useToast } from '../data'
@@ -459,7 +460,12 @@ export function AdminPartnerDetail() {
       {tab === 'money' && <StoreMoneyPanel storeId={store.id} />}
 
       {tab === 'listing' && <BagEditor store={store} save={(bag) => patch({ bag })} onSaved={(s) => setData({ ...data, store: s })} />}
-      {tab === 'profile' && <StoreProfileForm store={store} save={patch} onSaved={(s) => setData({ ...data, store: s })} />}
+      {tab === 'profile' && (
+        <>
+          <PhotoUpload store={store} path={`admin/stores/${store.id}/photo`} onSaved={(s) => setData({ ...data, store: s })} />
+          <StoreProfileForm store={store} save={patch} onSaved={(s) => setData({ ...data, store: s })} />
+        </>
+      )}
     </>
   )
 }

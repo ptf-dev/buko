@@ -23,7 +23,7 @@ function corsHeaders(req, path) {
   if (!origin || !NATIVE_ORIGINS.test(origin) || !PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))) return {}
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
@@ -78,6 +78,9 @@ export async function handle(req) {
   try {
     const secure = url.protocol === 'https:' || req.headers.get('x-forwarded-proto') === 'https'
     const result = await found.handler({ req, url, params: found.params, body, raw, secure })
+    // Images come back as bytes with their own content type and caching.
+    if (result.bytes !== undefined)
+      return new Response(/** @type {BodyInit} */ (/** @type {unknown} */ (result.bytes)), { status: result.status ?? 200, headers: { ...cors, ...(result.headers ?? {}) } })
     // Downloads (CSV exports, statements) come back as text with their own content type.
     if (result.text !== undefined)
       return new Response(result.text, { status: result.status ?? 200, headers: { 'Cache-Control': 'no-store', ...cors, ...(result.headers ?? {}) } })
@@ -92,5 +95,6 @@ export async function handle(req) {
 export const GET = handle
 export const POST = handle
 export const PATCH = handle
+export const PUT = handle
 export const DELETE = handle
 export const OPTIONS = handle

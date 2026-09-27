@@ -1,5 +1,5 @@
 import type { Filters, Location, Store } from '../types'
-import { resolveWindow } from './format'
+import { resolveWindow, isCollectSoon } from './format'
 
 export function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6371
@@ -36,12 +36,14 @@ export const DEFAULT_FILTERS: Filters = {
   categories: [],
   diets: [],
   hideSoldOut: false,
+  availableNow: false,
   sortBy: 'relevance',
 }
 
 export function activeFilterCount(f: Filters): number {
   return (
     (f.day !== 'any' ? 1 : 0) +
+    (f.availableNow ? 1 : 0) +
     f.categories.length +
     f.diets.length +
     (f.hideSoldOut ? 1 : 0) +
@@ -69,7 +71,7 @@ export function applyFilters(
   now: number,
 ): Listing[] {
   const q = filters.query.trim().toLowerCase()
-  const result = listings.filter(({ store, distance, start }) => {
+  const result = listings.filter(({ store, distance, start, end }) => {
     if (distance > radiusKm) return false
     if (q && !`${store.name} ${store.branch ?? ''} ${store.bag.title} ${store.category}`.toLowerCase().includes(q))
       return false
@@ -82,6 +84,7 @@ export function applyFilters(
       if (!ok) return false
     }
     if (filters.hideSoldOut && store.bag.quantity <= 0) return false
+    if (filters.availableNow && (store.bag.quantity <= 0 || !isCollectSoon(start, end, now))) return false
     return true
   })
 

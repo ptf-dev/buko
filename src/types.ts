@@ -21,6 +21,8 @@ export interface Store {
   id: string
   /** The store lets trusted customers pay cash at pickup. */
   acceptsCash?: boolean
+  /** Cover photo uploaded by the store (relative /api/... URL). */
+  photoUrl?: string
   name: string
   branch?: string
   category: Category
@@ -102,5 +104,7 @@ export interface Filters {
   categories: Category[]
   diets: Diet[]
   hideSoldOut: boolean
+  /** Only bags whose pickup window is open or opens within the hour. */
+  availableNow?: boolean
   sortBy: SortBy
 }

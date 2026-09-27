@@ -10,7 +10,7 @@ import { FINANCE_ROUTES } from './finance-routes.js'
 
 /**
  * @typedef {{ req: Request, url: URL, params: Record<string, string>, body: any, raw?: string, secure: boolean }} Ctx
- * @typedef {{ status?: number, body?: unknown, text?: string, headers?: Record<string, string> }} Result
+ * @typedef {{ status?: number, body?: unknown, text?: string, bytes?: Uint8Array, headers?: Record<string, string> }} Result
  * @typedef {(ctx: Ctx) => Promise<Result>} Handler
  */
 
@@ -29,10 +29,11 @@ const CANCEL_CUTOFF_MS = 2 * 60 * 60_000
 const STORE_SELECT = `
   select s.*, b.id as bag_id, b.title, b.description, b.price, b.original_price, b.quantity,
          b.pickup_day, b.pickup_start, b.pickup_end, b.diet, b.allergens_note, b.is_new, b.paused, b.updated_at as bag_updated_at,
-         coalesce(bi.accepts_cash, false) as accepts_cash
+         coalesce(bi.accepts_cash, false) as accepts_cash, ph.updated_at as photo_at
     from stores s
     left join bags b on b.store_id = s.id
-    left join store_billing bi on bi.store_id = s.id`
+    left join store_billing bi on bi.store_id = s.id
+    left join store_photos ph on ph.store_id = s.id`
 
 /** @param {any} r */
 function toStore(r) {
@@ -49,6 +50,8 @@ function toStore(r) {
     highlights: r.highlights,
     reviews: r.reviews,
     acceptsCash: r.accepts_cash || undefined,
+    // Versioned so a new upload is never served from cache.
+    photoUrl: r.photo_at ? `/api/stores/${r.id}/photo?v=${new Date(r.photo_at).getTime()}` : undefined,
     bag: {
       id: r.bag_id,
       title: r.title,
@@ -214,6 +217,58 @@ async function createOrder({ req, body }) {
   const started = await startPayment(created.order, created.paymentId, u[0]?.email ?? null)
   // redirectUrl is set when the customer must finish paying on the provider's page (real providers).
   return { status: 201, body: { order: toOrder(started.order), payment: { redirectUrl: started.redirectUrl } } }
+}
+
+/** A store's cover photo. Public and cached for a year (the URL changes with every upload). @type {Handler} */
+async function storePhoto({ params }) {
+  const { rows } = await query('select mime, data from store_photos where store_id = $1', [params.id])
+  if (!rows[0]) throw new HttpError(404, 'No photo.')
+  return { bytes: rows[0].data, headers: { 'Content-Type': rows[0].mime, 'Cache-Control': 'public, max-age=31536000, immutable' } }
+}
+
+const MAX_PHOTO_BYTES = 1_500_000
+
+/** @param {string} storeId @param {unknown} image data URL */
+async function savePhoto(storeId, image) {
+  const m = typeof image === 'string' ? /^data:(image\/(?:jpeg|webp|png));base64,([A-Za-z0-9+/=]+)$/.exec(image) : null
+  if (!m) throw new HttpError(400, 'Send a JPEG, WebP or PNG image.')
+  const data = Buffer.from(m[2], 'base64')
+  if (data.length > MAX_PHOTO_BYTES) throw new HttpError(413, 'That photo is too large. Try a smaller one.')
+  await query(
+    `insert into store_photos (store_id, mime, data) values ($1,$2,$3)
+     on conflict (store_id) do update set mime = excluded.mime, data = excluded.data, updated_at = now()`,
+    [storeId, m[1], data],
+  )
+}
+
+/** @type {Handler} */
+async function partnerPhoto({ req, body }) {
+  const user = await requireUser(req, 'partner')
+  await savePhoto(/** @type {string} */ (user.storeId), body.image)
+  return { body: { store: toManagedStore(await partnerStore(user)) } }
+}
+
+/** @type {Handler} */
+async function partnerDeletePhoto({ req }) {
+  const user = await requireUser(req, 'partner')
+  await query('delete from store_photos where store_id = $1', [user.storeId])
+  return { body: { store: toManagedStore(await partnerStore(user)) } }
+}
+
+/** @type {Handler} */
+async function adminPhoto({ req, params, body }) {
+  await requireUser(req, 'admin')
+  await savePhoto(params.id, body.image)
+  const { rows } = await query(`${STORE_SELECT} where s.id = $1`, [params.id])
+  return { body: { store: toManagedStore(rows[0]) } }
+}
+
+/** @type {Handler} */
+async function adminDeletePhoto({ req, params }) {
+  await requireUser(req, 'admin')
+  await query('delete from store_photos where store_id = $1', [params.id])
+  const { rows } = await query(`${STORE_SELECT} where s.id = $1`, [params.id])
+  return { body: { store: toManagedStore(rows[0]) } }
 }
 
 /** @type {Handler} */
@@ -914,6 +969,11 @@ async function demoLedger() {
 const ROUTES = [
   ['GET', 'health', health],
   ['GET', 'stores', listStores],
+  ['GET', 'stores/:id/photo', storePhoto],
+  ['PUT', 'partner/photo', partnerPhoto],
+  ['DELETE', 'partner/photo', partnerDeletePhoto],
+  ['PUT', 'admin/stores/:id/photo', adminPhoto],
+  ['DELETE', 'admin/stores/:id/photo', adminDeletePhoto],
   ['POST', 'orders', createOrder],
   ['GET', 'orders', deviceOrders],
   ['POST', 'orders/:id/cancel', cancelOrder],

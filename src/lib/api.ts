@@ -5,6 +5,11 @@ import { isNative } from './native'
 /** The native apps call the deployed API; the website uses the same origin. */
 const API_BASE = isNative ? LANDING_URL : ''
 
+/** Server-hosted files (e.g. store photos at /api/...) need the full address inside the native apps. */
+export function assetUrl(path: string): string {
+  return path.startsWith('/api/') ? `${API_BASE}${path}` : path
+}
+
 export class ApiError extends Error {
   status: number
   code?: string

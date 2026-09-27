@@ -1,8 +1,11 @@
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Circle, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { MAP_TILES } from '../config'
+import { logoColor } from '../data/categories'
+import { assetUrl } from '../lib/api'
+import { initials } from '../lib/format'
 import { formatPrice } from '../lib/format'
 import type { Listing } from '../lib/search'
 import type { Location } from '../types'
@@ -18,6 +21,85 @@ function pinIcon(label: string, variant: '' | 'sold-out' | 'active') {
 const dotIcons = {
   on: L.divIcon({ className: '', html: '<span class="store-dot"></span>', iconSize: [0, 0] }),
   off: L.divIcon({ className: '', html: '<span class="store-dot off"></span>', iconSize: [0, 0] }),
+}
+
+function logoIcon(l: Listing, active: boolean) {
+  const s = l.store
+  const photo = s.photoUrl ? `background-image:url('${assetUrl(s.photoUrl)}');` : ''
+  return L.divIcon({
+    className: '',
+    html: `<span class="logo-pin ${s.bag.quantity > 0 ? '' : 'off'} ${active ? 'active' : ''}" style="background-color:${logoColor(s.id)};${photo}">${s.photoUrl ? '' : initials(s.name)}</span>`,
+    iconSize: [0, 0],
+  })
+}
+
+function clusterIcon(n: number) {
+  return L.divIcon({ className: '', html: `<span class="cluster-pin">${n}</span>`, iconSize: [0, 0] })
+}
+
+/**
+ * Groups stores that would overlap at the current zoom into a numbered circle (tap to zoom in),
+ * and shows the rest as round store-logo pins.
+ */
+function Clusters({ listings, selectedId, onSelect }: { listings: Listing[]; selectedId?: string | null; onSelect?: (id: string) => void }) {
+  const map = useMap()
+  const [view, setView] = useState(0)
+  useMapEvents({ zoomend: () => setView((v) => v + 1), moveend: () => setView((v) => v + 1) })
+  const groups = useMemo(() => {
+    void view
+    const zoom = map.getZoom()
+    const RADIUS = 52
+    const out: { items: Listing[]; x: number; y: number }[] = []
+    for (const l of listings) {
+      const p = map.project([l.store.lat, l.store.lng], zoom)
+      const g = out.find((c) => Math.hypot(c.x - p.x, c.y - p.y) < RADIUS && !c.items.some((i) => i.store.id === selectedId) && l.store.id !== selectedId)
+      if (g) {
+        g.items.push(l)
+        g.x = (g.x * (g.items.length - 1) + p.x) / g.items.length
+        g.y = (g.y * (g.items.length - 1) + p.y) / g.items.length
+      } else out.push({ items: [l], x: p.x, y: p.y })
+    }
+    return out.map((g) => ({ ...g, pos: map.unproject([g.x, g.y], zoom) }))
+  }, [listings, map, view, selectedId])
+  return (
+    <>
+      {groups.map((g) =>
+        g.items.length === 1 ? (
+          <Marker
+            key={g.items[0]!.store.id}
+            position={[g.items[0]!.store.lat, g.items[0]!.store.lng]}
+            icon={logoIcon(g.items[0]!, g.items[0]!.store.id === selectedId)}
+            zIndexOffset={g.items[0]!.store.id === selectedId ? 1000 : 0}
+            eventHandlers={onSelect ? { click: () => onSelect(g.items[0]!.store.id) } : undefined}
+          />
+        ) : (
+          <Marker
+            key={g.items.map((i) => i.store.id).join('|')}
+            position={g.pos}
+            icon={clusterIcon(g.items.length)}
+            eventHandlers={{
+              click: () => map.fitBounds(L.latLngBounds(g.items.map((i) => [i.store.lat, i.store.lng] as [number, number])), { padding: [70, 70], maxZoom: 18 }),
+            }}
+          />
+        ),
+      )}
+    </>
+  )
+}
+
+/** Tapping the map background (not a pin) clears the selection. */
+function OnMapClick({ onClick }: { onClick: () => void }) {
+  useMapEvents({ click: onClick })
+  return null
+}
+
+/** Exposes a "recenter on me" control through a callback ref. */
+function Controller({ onReady }: { onReady: (api: { recenter: (lat: number, lng: number) => void }) => void }) {
+  const map = useMap()
+  useEffect(() => {
+    onReady({ recenter: (lat, lng) => map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration: 0.6 }) })
+  }, [map, onReady])
+  return null
 }
 
 const meIcon = L.divIcon({ className: '', html: '<div class="me-pin"></div>', iconSize: [0, 0] })
@@ -106,6 +188,9 @@ export function MapView({
   zoomControls = false,
   follow = true,
   markerStyle = 'price',
+  cluster = false,
+  onBackgroundClick,
+  onReady,
 }: {
   listings: Listing[]
   /** Map centre and search radius. */
@@ -129,6 +214,10 @@ export function MapView({
   follow?: boolean
   /** Price labels, or small dots where many stores are shown at low zoom (location picker). */
   markerStyle?: 'price' | 'dot'
+  /** Store-logo pins grouped into numbered clusters where they overlap (Browse map). */
+  cluster?: boolean
+  onBackgroundClick?: () => void
+  onReady?: (api: { recenter: (lat: number, lng: number) => void }) => void
 }) {
   const markers = useMemo(
     () =>
@@ -175,7 +264,10 @@ export function MapView({
         />
       )}
       {me && <Marker position={[me.lat, me.lng]} icon={meIcon} interactive={false} />}
-      {markers.map((m) => (
+      {onBackgroundClick && <OnMapClick onClick={onBackgroundClick} />}
+      {onReady && <Controller onReady={onReady} />}
+      {cluster && <Clusters listings={listings} selectedId={selectedId} onSelect={onSelect} />}
+      {!cluster && markers.map((m) => (
         <Marker
           key={m.id}
           position={m.position}

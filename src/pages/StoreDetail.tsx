@@ -79,7 +79,7 @@ export function StoreDetail() {
   return (
     <div className="relative min-h-full bg-cream pb-28">
       <div className="relative h-56">
-        <BagArt store={store} className="h-full w-full" />
+        <BagArt store={store} shade className="h-full w-full" />
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3">
           <button
             type="button"
