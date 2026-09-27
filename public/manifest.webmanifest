@@ -1,0 +1,10 @@
+{
+  "name": "Buko – Rescue surplus food",
+  "short_name": "Buko",
+  "description": "Rescue delicious unsold food from local stores at a third of the price.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#00615f",
+  "theme_color": "#00615f",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

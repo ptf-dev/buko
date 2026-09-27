@@ -1,0 +1,117 @@
+import { Clock, Leaf, LocateFixed, MapPin, ShoppingBag } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Button } from '../components/Button'
+import { useGeolocation } from '../components/LocationSheet'
+import { APP_NAME, DEFAULT_LOCATION } from '../config'
+import { useAppState, useDispatch } from '../state/store'
+
+const SLIDES = [
+  {
+    icon: ShoppingBag,
+    title: 'Rescue delicious food',
+    text: 'Local bakeries, restaurants and shops sell their unsold food in Surprise Bags at a third of the price.',
+  },
+  {
+    icon: Clock,
+    title: 'Reserve, then pick up',
+    text: 'Reserve and pay in the app, then collect your bag in the store’s pickup window. Just swipe to collect.',
+  },
+  {
+    icon: Leaf,
+    title: 'Good for the planet',
+    text: 'Every bag you rescue saves around 2.7 kg of CO₂e. Track your impact as you go.',
+  },
+]
+
+export function Onboarding() {
+  const { onboarded, profile } = useAppState()
+  const dispatch = useDispatch()
+  const navigate = useNavigate()
+  const [step, setStep] = useState(0)
+  const [name, setName] = useState(profile.name)
+  const geo = useGeolocation()
+  const onSetup = step === SLIDES.length
+
+  const finish = (lat = DEFAULT_LOCATION.lat, lng = DEFAULT_LOCATION.lng, label = DEFAULT_LOCATION.label) => {
+    dispatch({ type: 'completeOnboarding', name, location: { ...DEFAULT_LOCATION, lat, lng, label } })
+    navigate('/', { replace: true })
+  }
+
+  const next = () => {
+    if (step < SLIDES.length - 1) setStep(step + 1)
+    else if (onboarded) navigate(-1)
+    else setStep(SLIDES.length)
+  }
+
+  return (
+    <div className="flex min-h-full flex-col bg-brand px-6 pt-10 pb-8 text-white">
+      <p className="text-center text-3xl font-black tracking-tight">
+        {APP_NAME.toLowerCase()}
+        <span className="text-sun">.</span>
+      </p>
+
+      {!onSetup ? (
+        <>
+          <div key={step} className="animate-fade-in flex flex-1 flex-col items-center justify-center text-center">
+            {(() => {
+              const Icon = SLIDES[step]!.icon
+              return (
+                <div className="animate-pop flex h-40 w-40 items-center justify-center rounded-full bg-white/10">
+                  <Icon className="h-20 w-20 text-sun" strokeWidth={1.5} />
+                </div>
+              )
+            })()}
+            <h1 className="mt-10 text-3xl font-bold">{SLIDES[step]!.title}</h1>
+            <p className="mt-3 max-w-xs text-mint">{SLIDES[step]!.text}</p>
+          </div>
+          <div className="mb-6 flex justify-center gap-2">
+            {SLIDES.map((_, i) => (
+              <span key={i} className={`h-2 rounded-full transition-all ${i === step ? 'w-6 bg-sun' : 'w-2 bg-white/30'}`} />
+            ))}
+          </div>
+          <Button className="w-full bg-white !text-brand hover:bg-mint" onClick={next}>
+            {step < SLIDES.length - 1 ? 'Next' : onboarded ? 'Done' : 'Get started'}
+          </Button>
+          {!onboarded && step < SLIDES.length - 1 && (
+            <button type="button" onClick={() => setStep(SLIDES.length)} className="mt-3 text-sm font-semibold text-mint">
+              Skip
+            </button>
+          )}
+        </>
+      ) : (
+        <div className="animate-fade-in flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col justify-center">
+            <h1 className="text-3xl font-bold">Let’s get you set up</h1>
+            <label className="mt-8 block text-sm font-semibold text-mint">
+              What should we call you?
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your first name"
+                className="mt-2 h-12 w-full rounded-xl bg-white px-4 text-base font-normal text-ink outline-none placeholder:text-muted"
+              />
+            </label>
+            <p className="mt-8 text-sm font-semibold text-mint">Where do you want to find food?</p>
+            {geo.status === 'error' && (
+              <p className="mt-2 text-sm text-sun">We couldn’t access your location. You can use the city centre instead.</p>
+            )}
+          </div>
+          <div className="space-y-3">
+            <Button
+              className="w-full bg-white !text-brand hover:bg-mint"
+              onClick={() => geo.locate((lat, lng) => finish(lat, lng, 'Current location'))}
+            >
+              <LocateFixed className="h-5 w-5" />
+              {geo.status === 'loading' ? 'Finding you…' : 'Use my location'}
+            </Button>
+            <Button variant="ghost" className="w-full !text-white ring-2 ring-white/40 hover:bg-white/10" onClick={() => finish()}>
+              <MapPin className="h-5 w-5" /> Explore {DEFAULT_LOCATION.label}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
