@@ -49,7 +49,9 @@ function CodeCheck({ onDone }: { onDone: () => void }) {
         ok: !r.alreadyCollected,
         text: r.alreadyCollected
           ? `Code ${r.order.pickupCode} was already collected.`
-          : `Valid: hand over ${r.order.quantity} bag${r.order.quantity > 1 ? 's' : ''} (${formatPrice(r.order.unitPrice * r.order.quantity)} paid).`,
+          : r.order.paymentMethod === 'cash'
+            ? `Cash order: collect ${formatPrice(r.order.unitPrice * r.order.quantity)} in cash, then hand over ${r.order.quantity} bag${r.order.quantity > 1 ? 's' : ''}.`
+            : `Valid: hand over ${r.order.quantity} bag${r.order.quantity > 1 ? 's' : ''} (${formatPrice(r.order.unitPrice * r.order.quantity)} paid).`,
       })
       setCode('')
       onDone()
@@ -468,7 +470,18 @@ export function PartnerOrders() {
     { key: 'code', header: 'Code', render: (o) => <span className="font-mono font-semibold tracking-[0.12em]">{o.pickupCode}</span> },
     { key: 'pickup', header: 'Pickup', sort: (o) => o.pickupStart, render: (o) => formatRange(o.pickupStart, o.pickupEnd, now) },
     { key: 'qty', header: 'Bags', align: 'right', sort: (o) => o.quantity, render: (o) => o.quantity },
-    { key: 'total', header: 'Paid', align: 'right', sort: (o) => o.unitPrice * o.quantity, render: (o) => formatPrice(o.unitPrice * o.quantity) },
+    {
+      key: 'total',
+      header: 'Paid',
+      align: 'right',
+      sort: (o) => o.unitPrice * o.quantity,
+      render: (o) => (
+        <span>
+          {formatPrice(o.unitPrice * o.quantity)}
+          {o.paymentMethod === 'cash' && <span className="ml-1.5 rounded-full bg-[#fff1cc] px-2 py-0.5 text-xs font-semibold text-[#7a5400]">Cash</span>}
+        </span>
+      ),
+    },
     {
       key: 'placed',
       header: 'Reserved',

@@ -4,7 +4,7 @@ import { AuthProvider, ToastProvider, useAuth, useResource } from './data'
 import { AdminOrders, AdminOverviewPage, AdminPartnerDetail, AdminPartners, AdminTeam } from './pages/Admin'
 import { Apply, Login, NoDatabase, Pending, Setup } from './pages/Auth'
 import { PartnerEarnings } from './pages/Earnings'
-import { AdminBilling, AdminComplaints, AdminFinance, AdminFinanceSettings, AdminPayouts } from './pages/Finance'
+import { AdminBilling, AdminComplaints, AdminFinance, AdminFinanceSettings, AdminPaymentsMonitor, AdminPayouts, AdminRequests } from './pages/Finance'
 import { PartnerListing, PartnerOrders, PartnerStore, PartnerToday } from './pages/Partner'
 import { adminNav, PARTNER_NAV, Shell } from './Shell'
 import type { AdminOverview } from './types'
@@ -84,6 +84,8 @@ function Routed() {
         <Route path="orders" element={<AdminOrders />} />
         <Route path="finance" element={<AdminFinance />} />
         <Route path="finance/payouts" element={<AdminPayouts />} />
+        <Route path="finance/requests" element={<AdminRequests />} />
+        <Route path="finance/payments" element={<AdminPaymentsMonitor />} />
         <Route path="finance/complaints" element={<AdminComplaints />} />
         <Route path="finance/stores" element={<AdminBilling />} />
         <Route path="finance/settings" element={<AdminFinanceSettings />} />

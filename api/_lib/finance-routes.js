@@ -112,12 +112,12 @@ function complaintView(k) {
     resolutionNote: k.resolution_note,
     createdAt: k.created_at,
     resolvedAt: k.resolved_at,
-    order: { quantity: k.quantity, unitPrice: k.unit_price, total: k.quantity * k.unit_price * 100, pickupCode: k.pickup_code, collectedAt: k.collected_at },
+    order: { quantity: k.quantity, unitPrice: k.unit_price, total: k.quantity * k.unit_price * 100, pickupCode: k.pickup_code, collectedAt: k.collected_at, cash: k.payment_method === 'cash' },
   }
 }
 
 const COMPLAINT_SELECT = `
-  select k.*, s.name as store_name, u.name as customer_name, o.quantity, o.unit_price, o.pickup_code, o.collected_at
+  select k.*, s.name as store_name, u.name as customer_name, o.quantity, o.unit_price, o.pickup_code, o.collected_at, o.payment_method
     from complaints k join stores s on s.id = k.store_id join orders o on o.id = k.order_id left join users u on u.id = k.user_id`
 
 /** @param {{ payout: any, lines: any[] }} st */
@@ -757,7 +757,7 @@ async function requestPage(id, storeId) {
   )
   const covered = lines.reduce((a, l) => a + l.amount, 0) - r.amount
   const d = (/** @type {any} */ v) => new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  const L = (/** @type {number} */ q) => `${(q / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} L`
+  const L = (/** @type {number} */ q) => `${q < 0 ? '−' : ''}${(Math.abs(q) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} L`
   const bank = s.ngopuIban
     ? `<p><b>${esc(s.ngopuLegalName)}</b>${s.ngopuNipt ? ` · NIPT ${esc(s.ngopuNipt)}` : ''}<br>${esc(s.ngopuBank)}<br>IBAN <b>${esc(s.ngopuIban.replace(/(.{4})/g, '$1 ').trim())}</b></p>`
     : `<p class="warn">Ngopu’s bank account will be added here. Contact us before paying.</p>`
@@ -781,7 +781,7 @@ async function requestPage(id, storeId) {
 <p>These are Ngopu fees your store owes, mostly commission on orders customers paid in cash at pickup, which Ngopu didn’t collect. Card sales are settled automatically in your payouts.</p>
 <table><thead><tr><th>Fees owed to Ngopu (all time, up to ${d(r.created_at)})</th><th>Amount</th></tr></thead><tbody>
 ${lines.map((l) => `<tr><td>${esc(TYPE_LABELS[/** @type {keyof typeof TYPE_LABELS} */ (l.type)] ?? l.type)}</td><td>${L(l.amount)}</td></tr>`).join('')}
-${covered > 0 ? `<tr><td class="muted">Already covered by your card sales</td><td class="muted">−${L(covered)}</td></tr>` : ''}
+${covered > 0 ? `<tr><td class="muted">Already covered by your card sales</td><td class="muted">${L(-covered)}</td></tr>` : ''}
 <tr class="total"><td>Amount to pay</td><td>${L(r.amount)}</td></tr></tbody></table>
 <div class="box"><p style="margin-top:0"><b>Pay by bank transfer</b> with the reference <b>${esc(r.number)}</b> by ${d(r.due_at)}.</p>${bank}
 <p class="muted" style="margin-bottom:0">If you don’t pay, the amount is taken from your next Ngopu payouts instead.</p></div>

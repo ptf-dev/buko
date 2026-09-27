@@ -1,7 +1,8 @@
-import { AlertTriangle, Banknote, CheckCircle2, Download, FileSpreadsheet, History, Landmark, MessageSquareWarning, Play } from 'lucide-react'
+import { AlertTriangle, Banknote, CheckCircle2, Download, FileSpreadsheet, FileText, History, Landmark, MessageSquareWarning, Play } from 'lucide-react'
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
+import { useNow } from '../../state/store'
 import { BarChart, shortDay } from '../BarChart'
 import { useResource, useToast } from '../data'
 import {
@@ -20,6 +21,7 @@ import {
   type FinanceSettings,
   type LedgerLine,
   type Payout,
+  type PaymentRequest,
   type Terms,
 } from '../money'
 import {
@@ -53,6 +55,8 @@ function FinanceTabs() {
   const tabs = [
     { to: '/admin/finance', label: 'Overview', end: true },
     { to: '/admin/finance/payouts', label: 'Payouts' },
+    { to: '/admin/finance/requests', label: 'Fee requests' },
+    { to: '/admin/finance/payments', label: 'Payments' },
     { to: '/admin/finance/complaints', label: 'Complaints' },
     { to: '/admin/finance/stores', label: 'Store billing' },
     { to: '/admin/finance/settings', label: 'Settings & exports' },
@@ -111,6 +115,9 @@ export function AdminFinance() {
       counts.draft_payouts && { to: '/admin/finance/payouts', text: `${counts.draft_payouts} payout${counts.draft_payouts > 1 ? 's' : ''} waiting for approval` },
       counts.approved_payouts && { to: '/admin/finance/payouts', text: `${counts.approved_payouts} approved payout${counts.approved_payouts > 1 ? 's' : ''} to send` },
       counts.missing_bank && { to: '/admin/finance/stores', text: `${counts.missing_bank} active store${counts.missing_bank > 1 ? 's' : ''} without bank details` },
+      counts.failed_refunds && { to: '/admin/finance/payments', text: `${counts.failed_refunds} refund${counts.failed_refunds > 1 ? 's' : ''} failed` },
+      counts.open_disputes && { to: '/admin/finance/payments', text: `${counts.open_disputes} disputed payment${counts.open_disputes > 1 ? 's' : ''}` },
+      counts.overdue_requests && { to: '/admin/finance/requests', text: `${counts.overdue_requests} overdue fee request${counts.overdue_requests > 1 ? 's' : ''}` },
     ].filter(Boolean) as { to: string; text: string }[]
 
     const balanceColumns: Column<Balance & { id: string }>[] = [
@@ -176,11 +183,13 @@ export function AdminFinance() {
             <Breakdown
               rows={[
                 { label: 'Bags sold', value: money(s.gross) },
+                ...(s.cash_sales ? [{ label: 'of which cash at pickup', value: money(s.cash_sales), muted: true }] : []),
                 { label: 'Cancelled and refunded', value: minus(s.cancelled), muted: true },
                 { label: 'Complaint refunds (stores)', value: minus(s.complaint_refunds), muted: true },
                 { label: 'Commission', value: money(s.commission) },
                 { label: 'Membership fees', value: money(s.membership) },
                 { label: 'Refunds paid by Ngopu', value: minus(s.goodwill), muted: true },
+                ...(s.processor_fees ? [{ label: 'Card processing fees', value: minus(s.processor_fees), muted: true }] : []),
                 { label: 'Adjustments to stores', value: signedMoney(-s.adjustments), muted: true },
                 ...(data.settings.vatRegistered ? [{ label: 'VAT owed', value: minus(s.vat), muted: true }] : []),
                 { label: 'Ngopu revenue', value: money(s.net_revenue), strong: true },
@@ -479,6 +488,7 @@ export function AdminComplaints() {
                 {k.status === 'refunded' && (
                   <p className="mt-1 text-sm">
                     Refunded {money(k.refundAmount ?? 0)}, paid by {k.fundedBy === 'ngopu' ? 'Ngopu' : 'the store'}
+                    {k.order.cash ? ' (cash order: paid back by hand)' : ''}
                   </p>
                 )}
                 {k.resolutionNote && <p className="mt-1 text-sm text-muted">Note: {k.resolutionNote}</p>}
@@ -549,7 +559,11 @@ function DecideDialog({ complaint: k, onClose, onDone }: { complaint: Complaint;
         <Field label={action === 'reject' ? 'Reason (required)' : 'Note (optional)'} hint="The store sees this note.">
           {(id, d) => <TextArea id={id} aria-describedby={d} value={note} onChange={(e) => setNote(e.target.value)} />}
         </Field>
-        <p className="text-[13px] text-muted">The refund to the customer’s card is sent automatically once card payments are live.</p>
+        <p className="text-[13px] text-muted">
+          {k.order.cash
+            ? 'Cash order: there’s no card to refund. The store (or Ngopu) pays the customer back by hand; Ngopu’s commission on it is returned automatically.'
+            : 'The refund goes back to the customer’s card automatically.'}
+        </p>
         <div className="flex gap-2">
           <Btn type="submit" loading={busy} disabled={action === 'reject' && !note.trim()} variant={action === 'reject' ? 'danger' : 'primary'}>
             {action === 'refund' ? `Refund ${money(Math.round(Number(amount || 0) * 100))}` : 'Reject complaint'}
@@ -606,6 +620,7 @@ export function AdminBilling() {
         r.billing.pending ? <Pill tone="warn">To check</Pill> : r.billing.iban ? <span className="text-muted">{r.billing.legalName} · {r.billing.iban}</span> : <Pill tone="bad">Missing</Pill>,
     },
     { key: 'member', header: 'Membership until', render: (r) => <span className="text-muted">{r.billing.membershipPaidUntil ? shortDate(r.billing.membershipPaidUntil) : 'Free year not started'}</span> },
+    { key: 'cash', header: 'Cash', render: (r) => (r.billing.acceptsCash ? <Pill tone="info">Accepts</Pill> : <span className="text-muted">—</span>) },
     { key: 'paused', header: 'Payouts', render: (r) => (r.billing.payoutsPaused ? <Pill tone="bad">Paused</Pill> : <Pill tone="good">On</Pill>) },
   ]
   return (
@@ -699,6 +714,13 @@ const AUDIT_LABELS: Record<string, string> = {
   'billing.terms': 'changed terms for',
   'ledger.adjustment': 'added an adjustment for',
   'order.store_cancel': 'cancelled order (store)',
+  'request.create': 'created payment request',
+  'request.paid': 'recorded payment for request',
+  'request.cancel': 'cancelled payment request',
+  'refund.retry': 'retried refund',
+  'dispute.opened': 'dispute opened on order',
+  'dispute.won': 'dispute won on order',
+  'dispute.lost': 'dispute lost on order',
 }
 
 function SettingsForm({ settings, onSaved }: { settings: FinanceSettings; onSaved: () => void }) {
@@ -738,6 +760,27 @@ function SettingsForm({ settings, onSaved }: { settings: FinanceSettings; onSave
         {num('payoutEveryDays', 'Payout every', 'days')}
         {num('noShowGraceMinutes', 'No-show after pickup ends', 'min')}
         {num('bankChangeHoldHours', 'Hold after new bank details', 'h')}
+        <h3 className="pt-2 font-semibold sm:col-span-2">Cash at pickup</h3>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-cream p-3 sm:col-span-2">
+          <div>
+            <p className="font-medium">Offer cash at pickup</p>
+            <p className="text-[13px] text-muted">Only to trusted customers, at stores that turn it on.</p>
+          </div>
+          <Switch checked={f.cashEnabled} onChange={(v) => setF({ ...f, cashEnabled: v })} label="Cash at pickup" />
+        </div>
+        {num('cashMinCollected', 'Collected orders needed', 'orders')}
+        {num('cashMaxNoShows', 'Missed pickups allowed (180 days)', '')}
+        {num('cashMaxOpen', 'Cash reservations at once', '')}
+        <h3 className="pt-2 font-semibold sm:col-span-2">Fee requests</h3>
+        {num('feeRequestMinLek', 'Request when a store owes at least', 'L')}
+        {num('feeRequestDueDays', 'Days to pay', 'days')}
+        <Field label="Ngopu legal name">{(id) => <Input id={id} value={f.ngopuLegalName} onChange={(e) => setF({ ...f, ngopuLegalName: e.target.value })} />}</Field>
+        <Field label="Ngopu NIPT">{(id) => <Input id={id} value={f.ngopuNipt} onChange={(e) => setF({ ...f, ngopuNipt: e.target.value.toUpperCase() })} />}</Field>
+        <Field label="Bank">{(id) => <Input id={id} value={f.ngopuBank} onChange={(e) => setF({ ...f, ngopuBank: e.target.value })} />}</Field>
+        <Field label="Ngopu IBAN" hint="Printed on payment requests">
+          {(id, d) => <Input id={id} aria-describedby={d} value={f.ngopuIban} onChange={(e) => setF({ ...f, ngopuIban: e.target.value.toUpperCase() })} />}
+        </Field>
+        <h3 className="pt-2 font-semibold sm:col-span-2">Tax</h3>
         <div className="flex items-center justify-between gap-3 rounded-xl bg-cream p-3 sm:col-span-2">
           <div>
             <p className="font-medium">Ngopu is VAT-registered</p>
@@ -797,6 +840,15 @@ interface StoreMoney {
 export function StoreMoneyPanel({ storeId }: { storeId: string }) {
   const { data, error, loading, reload } = useResource<StoreMoney>(`admin/stores/${storeId}/money`)
   const [dialog, setDialog] = useState<'terms' | 'adjust' | null>(null)
+  const toast = useToast()
+  const request = async () => {
+    try {
+      const r = await api<{ request: { number: string } }>(`admin/stores/${storeId}/payment-request`, { method: 'POST', json: {} })
+      toast(`Payment request ${r.request.number} created`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not create the request.', 'error')
+    }
+  }
   if (loading) return <PageSkeleton />
   if (error || !data) return <ErrorState message={error ?? 'Unknown error'} onRetry={reload} />
   const { balance: b, billing, terms } = data
@@ -810,8 +862,14 @@ export function StoreMoneyPanel({ storeId }: { storeId: string }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Owed to store" value={money(b.owed)} emphasis>
-          <p className="mt-1 text-[13px] text-mint">Real money only</p>
+        <Kpi label={b.owed < 0 ? 'Store owes Ngopu' : 'Owed to store'} value={money(Math.abs(b.owed))} emphasis>
+          {b.owed < 0 ? (
+            <button type="button" onClick={request} className="mt-1 text-[13px] font-semibold text-sun underline">
+              Send a payment request
+            </button>
+          ) : (
+            <p className="mt-1 text-[13px] text-mint">Real money only</p>
+          )}
         </Kpi>
         <Kpi label="Payable now" value={money(b.payable)} />
         <Kpi label="On hold" value={money(b.pending)} />
@@ -869,6 +927,7 @@ function TermsDialog({ storeId, data, onClose, onDone }: { storeId: string; data
   const [fee, setFee] = useState(String(data.terms.membershipFeeLek))
   const [until, setUntil] = useState(data.billing.membershipPaidUntil?.slice(0, 10) ?? '')
   const [paused, setPaused] = useState(data.billing.payoutsPaused)
+  const [acceptsCash, setAcceptsCash] = useState(data.billing.acceptsCash)
   const [busy, setBusy] = useState(false)
   const save = async (e: FormEvent) => {
     e.preventDefault()
@@ -882,6 +941,7 @@ function TermsDialog({ storeId, data, onClose, onDone }: { storeId: string; data
           membershipFeeLek: Number(fee) === data.defaults.membershipFeeLek ? null : Number(fee),
           membershipPaidUntil: until || null,
           payoutsPaused: paused,
+          acceptsCash,
         },
       })
       toast('Terms saved')
@@ -916,6 +976,10 @@ function TermsDialog({ storeId, data, onClose, onDone }: { storeId: string; data
         <div className="flex items-center justify-between gap-3 rounded-xl bg-cream p-3">
           <p className="text-sm font-medium">Pause payouts to this store</p>
           <Switch checked={paused} onChange={setPaused} label="Pause payouts" />
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-cream p-3">
+          <p className="text-sm font-medium">Accepts cash at pickup</p>
+          <Switch checked={acceptsCash} onChange={setAcceptsCash} label="Accepts cash" />
         </div>
         <p className="text-[13px] text-muted">New terms apply to orders closed from now on.</p>
         <div className="flex gap-2">
@@ -976,5 +1040,275 @@ function AdjustDialog({ storeId, onClose, onDone }: { storeId: string; onClose: 
         </div>
       </form>
     </Dialog>
+  )
+}
+
+/* Fee requests ------------------------------------------------------------ */
+
+const REQUEST_TONE = { open: ['warn', 'Open'], paid: ['good', 'Paid'], settled: ['info', 'Settled from payouts'], cancelled: ['neutral', 'Cancelled'] } as const
+
+export function AdminRequests() {
+  const { data, error, loading, reload } = useResource<{ requests: PaymentRequest[] }>('admin/finance/requests')
+  const toast = useToast()
+  const [paying, setPaying] = useState<PaymentRequest | null>(null)
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    setBusy(true)
+    try {
+      const r = await api<{ created: { number: string }[] }>('admin/finance/requests/run', { method: 'POST', json: {} })
+      toast(r.created.length ? `${r.created.length} request${r.created.length > 1 ? 's' : ''} created` : 'No store owes enough for a request')
+      reload()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Something went wrong.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const cancel = async (id: string) => {
+    try {
+      await api(`admin/finance/requests/${id}/cancel`, { method: 'POST', json: {} })
+      toast('Request cancelled')
+      reload()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Something went wrong.', 'error')
+    }
+  }
+  const now = useNow(60_000)
+  const columns: Column<PaymentRequest>[] = [
+    { key: 'number', header: 'Number', sort: (r) => r.number, render: (r) => <span className="font-medium">{r.number}</span> },
+    { key: 'store', header: 'Store', sort: (r) => r.storeName ?? '', render: (r) => r.storeName },
+    { key: 'amount', header: 'Amount', align: 'right', sort: (r) => r.amount, render: (r) => <span className="font-semibold">{money(r.amount)}</span> },
+    {
+      key: 'due',
+      header: 'Due',
+      sort: (r) => r.dueAt,
+      render: (r) => <span className={r.status === 'open' && Date.parse(r.dueAt) < now ? 'font-semibold text-[#a1261a]' : 'text-muted'}>{shortDate(r.dueAt)}</span>,
+    },
+    { key: 'status', header: 'Status', render: (r) => <Pill tone={REQUEST_TONE[r.status][0]}>{REQUEST_TONE[r.status][1]}</Pill> },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (r) => (
+        <span className="inline-flex items-center justify-end gap-1">
+          <a href={`/api/admin/finance/requests/${r.id}`} target="_blank" rel="noreferrer" className="rounded-lg px-2 py-1 text-sm font-medium text-brand hover:bg-brand-light">
+            View
+          </a>
+          {r.status === 'open' && (
+            <>
+              <Btn size="sm" onClick={() => setPaying(r)}>
+                Mark paid
+              </Btn>
+              <ConfirmBtn label="Cancel" confirmLabel="Cancel request" onConfirm={() => cancel(r.id)} />
+            </>
+          )}
+          {r.status === 'paid' && <span className="px-2 text-sm text-muted">Ref {r.reference}</span>}
+        </span>
+      ),
+    },
+  ]
+  return (
+    <FinancePage
+      title="Fee requests"
+      subtitle="When a store owes Ngopu (mostly commission on cash orders), send it a payment request. Unpaid amounts are also taken from its payouts."
+      actions={
+        <Btn onClick={run} loading={busy}>
+          <FileText className="h-4 w-4" aria-hidden /> Request fees from stores that owe
+        </Btn>
+      }
+    >
+      {loading ? (
+        <PageSkeleton />
+      ) : error || !data ? (
+        <ErrorState message={error ?? 'Unknown error'} onRetry={reload} />
+      ) : (
+        <Panel>
+          <DataTable
+            rows={data.requests}
+            columns={columns}
+            empty={<Empty icon={<FileText className="h-6 w-6" />} title="No payment requests yet" text="Requests appear here when a store owes Ngopu more than the minimum in Settings." />}
+          />
+        </Panel>
+      )}
+      {paying && <RequestPaidDialog request={paying} onClose={() => setPaying(null)} onDone={() => { setPaying(null); reload() }} />}
+    </FinancePage>
+  )
+}
+
+function RequestPaidDialog({ request, onClose, onDone }: { request: PaymentRequest; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [ref, setRef] = useState('')
+  const [amount, setAmount] = useState(String(request.amount / 100))
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await api(`admin/finance/requests/${request.id}/paid`, { method: 'POST', json: { reference: ref, amount: Number(amount) } })
+      toast('Payment recorded')
+      onDone()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not save.', 'error')
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog title={`${request.number} · ${request.storeName}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-muted">Record the bank transfer only once it’s in Ngopu’s account. The amount is credited to the store’s balance.</p>
+        <Field label="Amount received">{(id) => <Input id={id} type="number" min={1} step="any" suffix="L" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
+        <Field label="Bank transfer reference">{(id) => <Input id={id} value={ref} onChange={(e) => setRef(e.target.value)} required autoFocus />}</Field>
+        <div className="flex gap-2">
+          <Btn type="submit" loading={busy} disabled={!ref.trim() || !Number(amount)}>
+            Record payment
+          </Btn>
+          <Btn variant="ghost" onClick={onClose}>
+            Cancel
+          </Btn>
+        </div>
+      </form>
+    </Dialog>
+  )
+}
+
+/* Payments monitor -------------------------------------------------------- */
+
+interface PaymentsData {
+  provider: string
+  payments: { id: string; orderId: string; provider: string; providerRef: string | null; amount: number; refunded: number; fee: number | null; status: string; failure: string | null; createdAt: string; storeName: string }[]
+  refunds: { id: string; orderId: string; amount: number; reason: string; status: string; attempts: number; lastError: string | null; createdAt: string; storeName: string }[]
+  disputes: { id: string; orderId: string; amount: number; status: string; createdAt: string; resolvedAt: string | null; storeName: string }[]
+}
+
+const PAY_LABEL: Record<string, string> = {
+  succeeded: 'Succeeded',
+  pending: 'Waiting',
+  queued: 'Queued',
+  sent: 'Sent',
+  failed: 'Failed',
+  expired: 'Expired',
+  open: 'Open',
+  won: 'Won',
+  lost: 'Lost',
+}
+
+const PAY_TONE: Record<string, 'good' | 'warn' | 'bad' | 'neutral' | 'info'> = {
+  succeeded: 'good',
+  pending: 'warn',
+  queued: 'warn',
+  sent: 'info',
+  failed: 'bad',
+  expired: 'neutral',
+  open: 'warn',
+  won: 'good',
+  lost: 'bad',
+}
+
+export function AdminPaymentsMonitor() {
+  const { data, error, loading, reload } = useResource<PaymentsData>('admin/finance/payments', 60_000)
+  const toast = useToast()
+  const [recon, setRecon] = useState<{ available: boolean; payments: number; total: number; matched?: number; missingAtProvider?: unknown[]; unknownAtProvider?: unknown[]; amountMismatch?: unknown[] } | null>(null)
+  const retry = async (id: string) => {
+    try {
+      await api(`admin/finance/refunds/${id}/retry`, { method: 'POST', json: {} })
+      toast('Refund sent again')
+      reload()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not retry.', 'error')
+    }
+  }
+  const reconcile = async () => {
+    try {
+      setRecon(await api('admin/finance/reconcile', { method: 'POST', json: { days: 7 } }))
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not reconcile.', 'error')
+    }
+  }
+  return (
+    <FinancePage
+      title="Payments"
+      subtitle={data ? `Card payments, refunds and disputes from the payment provider (${data.provider === 'simulated' ? 'simulated until POK is connected' : data.provider}).` : 'Card payments, refunds and disputes.'}
+      actions={
+        <Btn variant="secondary" onClick={reconcile}>
+          Check last 7 days with provider
+        </Btn>
+      }
+    >
+      {recon && (
+        <Panel className="mb-5" title="Reconciliation · last 7 days" action={<Btn variant="ghost" size="sm" onClick={() => setRecon(null)}>Dismiss</Btn>}>
+          {recon.available ? (
+            <p className="text-[15px]">
+              {recon.matched} of {recon.payments} payments match the provider ({money(recon.total)}). {recon.missingAtProvider?.length ?? 0} missing at the provider,{' '}
+              {recon.unknownAtProvider?.length ?? 0} unknown to Ngopu, {recon.amountMismatch?.length ?? 0} with different amounts.
+            </p>
+          ) : (
+            <p className="text-[15px]">
+              {recon.payments} payments for {money(recon.total)} recorded. The simulated provider has no settlement report to compare with; this check becomes real once POK is connected.
+            </p>
+          )}
+        </Panel>
+      )}
+      {loading ? (
+        <PageSkeleton />
+      ) : error || !data ? (
+        <ErrorState message={error ?? 'Unknown error'} onRetry={reload} />
+      ) : (
+        <div className="space-y-5">
+          {data.disputes.length > 0 && (
+            <Panel title="Disputes (chargebacks)">
+              <DataTable
+                rows={data.disputes}
+                columns={[
+                  { key: 'date', header: 'Opened', render: (d) => shortDate(d.createdAt) },
+                  { key: 'store', header: 'Store', render: (d) => d.storeName },
+                  { key: 'amount', header: 'Amount', align: 'right', render: (d) => money(d.amount) },
+                  { key: 'status', header: 'Status', render: (d) => <Pill tone={PAY_TONE[d.status] ?? 'neutral'}>{PAY_LABEL[d.status] ?? d.status}</Pill> },
+                ]}
+              />
+            </Panel>
+          )}
+          <Panel title="Refunds">
+            <DataTable
+              rows={data.refunds}
+              columns={[
+                { key: 'date', header: 'Date', render: (r) => shortDate(r.createdAt) },
+                { key: 'store', header: 'Store', render: (r) => r.storeName },
+                { key: 'reason', header: 'Reason', render: (r) => <span className="text-muted">{r.reason}</span> },
+                { key: 'amount', header: 'Amount', align: 'right', render: (r) => money(r.amount) },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  render: (r) => (
+                    <span className="inline-flex items-center gap-2">
+                      <Pill tone={PAY_TONE[r.status] ?? 'neutral'}>{PAY_LABEL[r.status] ?? r.status}</Pill>
+                      {r.status === 'failed' && (
+                        <Btn size="sm" variant="secondary" onClick={() => retry(r.id)} title={r.lastError ?? undefined}>
+                          Retry
+                        </Btn>
+                      )}
+                    </span>
+                  ),
+                },
+              ]}
+              empty={<Empty icon={<Banknote className="h-6 w-6" />} title="No refunds yet" text="Refunds for cancellations and complaints appear here." />}
+            />
+          </Panel>
+          <Panel title="Payments (latest 200)">
+            <DataTable
+              rows={data.payments}
+              columns={[
+                { key: 'date', header: 'Date', render: (p) => <span className="tabular-nums">{new Date(p.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span> },
+                { key: 'store', header: 'Store', render: (p) => p.storeName },
+                { key: 'amount', header: 'Amount', align: 'right', render: (p) => money(p.amount) },
+                { key: 'refunded', header: 'Refunded', align: 'right', render: (p) => <span className="text-muted">{p.refunded ? money(p.refunded) : '—'}</span> },
+                { key: 'status', header: 'Status', render: (p) => <Pill tone={PAY_TONE[p.status] ?? 'neutral'}>{PAY_LABEL[p.status] ?? p.status}</Pill> },
+                { key: 'ref', header: 'Provider ref.', render: (p) => <span className="font-mono text-xs text-muted">{p.providerRef ?? '—'}</span> },
+              ]}
+              empty={<Empty icon={<Banknote className="h-6 w-6" />} title="No card payments yet" text="Every card reservation creates a payment here." />}
+            />
+          </Panel>
+        </div>
+      )}
+    </FinancePage>
   )
 }

@@ -41,6 +41,10 @@ export interface Balance {
 
 export interface MoneySummary {
   gross: number
+  cash_sales: number
+  fee_payments: number
+  processor_fees: number
+  chargebacks: number
   cancelled: number
   complaint_refunds: number
   commission: number
@@ -53,7 +57,7 @@ export interface MoneySummary {
   paid_out: number
   net_revenue: number
   take_rate: number
-  orders: { collected: number; no_show: number; cancelled_customer: number; cancelled_store: number; bags: number; complaints: number }
+  orders: { collected: number; collected_cash: number; no_show: number; cancelled_customer: number; cancelled_store: number; bags: number; complaints: number }
 }
 
 export interface MoneyDay {
@@ -109,7 +113,7 @@ export interface Complaint {
   resolutionNote: string | null
   createdAt: string
   resolvedAt: string | null
-  order: { quantity: number; unitPrice: number; total: number; pickupCode: string; collectedAt: string | null }
+  order: { quantity: number; unitPrice: number; total: number; pickupCode: string; collectedAt: string | null; cash?: boolean }
 }
 
 export const COMPLAINT_REASON_LABELS: Record<string, string> = {
@@ -121,7 +125,22 @@ export const COMPLAINT_REASON_LABELS: Record<string, string> = {
   other: 'Something else',
 }
 
+export interface PaymentRequest {
+  id: string
+  number: string
+  storeId: string
+  storeName?: string
+  amount: number
+  status: 'open' | 'paid' | 'settled' | 'cancelled'
+  dueAt: string
+  paidAt: string | null
+  reference: string | null
+  note: string | null
+  createdAt: string
+}
+
 export interface Billing {
+  acceptsCash: boolean
   legalName: string | null
   nipt: string | null
   iban: string | null
@@ -151,9 +170,21 @@ export interface FinanceSettings {
   payoutEveryDays: number
   payoutAnchor: string
   bankChangeHoldHours: number
+  cashEnabled: boolean
+  cashMinCollected: number
+  cashMaxNoShows: number
+  cashMaxOpen: number
+  feeRequestMinLek: number
+  feeRequestDueDays: number
+  ngopuLegalName: string
+  ngopuNipt: string
+  ngopuBank: string
+  ngopuIban: string
 }
 
 export interface PartnerEarnings {
+  requests: PaymentRequest[]
+  ngopuBank: { legalName: string; nipt: string; bank: string; iban: string }
   balance: Balance
   nextPayoutAt: string
   summary: MoneySummary
@@ -173,7 +204,17 @@ export interface AdminFinanceOverview {
   series: MoneyDay[]
   balances: Balance[]
   totals: { owed: number; payable: number; pending: number; inPayout: number }
-  counts: { open_complaints: number; pending_bank: number; draft_payouts: number; approved_payouts: number; missing_bank: number }
+  counts: {
+    open_complaints: number
+    pending_bank: number
+    draft_payouts: number
+    approved_payouts: number
+    missing_bank: number
+    failed_refunds: number
+    open_disputes: number
+    open_requests: number
+    overdue_requests: number
+  }
   nextPayoutAt: string
   settings: FinanceSettings
 }
@@ -202,6 +243,12 @@ export const LEDGER_LABELS: Record<string, string> = {
   adjustment: 'Adjustment',
   membership_fee: 'Membership fee',
   payout: 'Payout to bank',
+  cash_sale: 'Cash sale',
+  cash_collected: 'Cash kept by the store',
+  fee_payment: 'Fee payment to Ngopu',
+  chargeback_hold: 'Disputed payment (held)',
+  chargeback_release: 'Dispute won (released)',
+  processor_fee: 'Card processing fee',
 }
 
 /** Sold value: what customers kept (sales minus cancellations). */

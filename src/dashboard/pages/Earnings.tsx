@@ -1,10 +1,10 @@
-import { Banknote, Download, Landmark, MessageSquareWarning, ReceiptText } from 'lucide-react'
+import { Banknote, Download, FileText, Landmark, MessageSquareWarning, ReceiptText } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { api } from '../../lib/api'
 import { BarChart, shortDay } from '../BarChart'
 import { useResource, useToast } from '../data'
-import { COMPLAINT_REASON_LABELS, minus, money, monthLabel, shortDate, type Billing, type Complaint, type PartnerEarnings, type Payout, type Terms } from '../money'
-import { Breakdown, Btn, ComplaintBadge, DataTable, Empty, ErrorState, Field, Input, Kpi, PageSkeleton, PageTitle, Panel, PayoutBadge, type Column } from '../ui'
+import { COMPLAINT_REASON_LABELS, minus, money, monthLabel, shortDate, type Billing, type Complaint, type PartnerEarnings, type Payout, type PaymentRequest, type Terms } from '../money'
+import { Breakdown, Btn, ComplaintBadge, DataTable, Empty, ErrorState, Field, Input, Kpi, PageSkeleton, PageTitle, Panel, PayoutBadge, Pill, Switch, type Column } from '../ui'
 
 export function PartnerEarnings() {
   const { data, error, loading, reload } = useResource<PartnerEarnings>('partner/earnings', 60_000)
@@ -33,6 +33,23 @@ export function PartnerEarnings() {
           </Btn>
         </div>
       )}
+
+      {data.requests
+        .filter((r) => r.status === 'open')
+        .map((r) => (
+          <div key={r.id} role="status" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl bg-[#fff1cc] p-4 text-[#5c4000]">
+            <FileText className="h-5 w-5 shrink-0" aria-hidden />
+            <p className="min-w-0 flex-1 text-[15px]">
+              <strong>
+                Payment request {r.number}: {money(r.amount)}
+              </strong>{' '}
+              due {shortDate(r.dueAt)}. Pay by bank transfer with reference {r.number}, or it’s taken from your next payouts.
+            </p>
+            <a href={`/api/partner/payment-requests/${r.id}`} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-xl bg-white px-3 text-sm font-semibold text-ink ring-1 ring-line hover:bg-cream">
+              View and print
+            </a>
+          </div>
+        ))}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi label="Next payout" value={money(Math.max(0, nextAmount))} emphasis>
@@ -63,6 +80,7 @@ export function PartnerEarnings() {
           <Breakdown
             rows={[
               { label: 'Bags sold', value: money(s.gross) },
+              ...(s.cash_sales ? [{ label: 'Paid to you in cash at pickup', value: minus(s.cash_sales), muted: true }] : []),
               { label: 'Cancelled and refunded', value: minus(s.cancelled), muted: true },
               ...(s.complaint_refunds ? [{ label: 'Complaint refunds', value: minus(s.complaint_refunds), muted: true }] : []),
               { label: <CommissionLabel terms={terms} />, value: minus(s.commission), muted: true },
@@ -78,7 +96,7 @@ export function PartnerEarnings() {
         </Panel>
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+      <div className="mt-5 grid gap-5">
         <PayoutsPanel payouts={data.payouts} minPayout={policy.minPayoutLek} />
         <MonthlyPanel data={data} />
       </div>
@@ -87,8 +105,12 @@ export function PartnerEarnings() {
 
       <div id="bank" className="mt-5 grid scroll-mt-24 gap-5 lg:grid-cols-[1.4fr_1fr]">
         <BankDetails billing={billing} onSaved={reload} />
-        <TermsPanel terms={terms} billing={billing} freeMonths={policy.membershipFreeMonths} />
+        <div className="space-y-5">
+          <TermsPanel terms={terms} billing={billing} freeMonths={policy.membershipFreeMonths} />
+          <CashPanel billing={billing} terms={terms} onSaved={reload} />
+        </div>
       </div>
+      {data.requests.length > 0 && <RequestsPanel requests={data.requests} />}
       <p className="mt-6 text-center text-[13px] text-muted">
         The monthly CSV lists every sale, refund and fee line, for your accountant.
       </p>
@@ -177,7 +199,11 @@ function ComplaintsPanel({ complaints }: { complaints: Complaint[] }) {
               {k.details && <p className="mt-0.5 text-sm text-muted">“{k.details}”</p>}
               {k.status === 'refunded' && (
                 <p className="mt-0.5 text-sm">
-                  {money(k.refundAmount ?? 0)} refunded {k.fundedBy === 'ngopu' ? 'by Ngopu (not taken from your earnings)' : 'from your earnings, commission returned'}
+                  {k.order.cash
+                    ? k.fundedBy === 'ngopu'
+                      ? `${money(k.refundAmount ?? 0)} refunded by Ngopu`
+                      : `Please give the customer ${money(k.refundAmount ?? 0)} back in cash. Ngopu returned its commission on it.`
+                    : `${money(k.refundAmount ?? 0)} refunded ${k.fundedBy === 'ngopu' ? 'by Ngopu (not taken from your earnings)' : 'from your earnings, commission returned'}`}
                 </p>
               )}
               {k.resolutionNote && <p className="mt-0.5 text-sm text-muted">Ngopu: {k.resolutionNote}</p>}
@@ -287,6 +313,67 @@ function TermsPanel({ terms, billing, freeMonths }: { terms: Terms; billing: Bil
       <p className="mt-3 text-[13px] text-muted">
         You only pay commission on bags that are sold and not cancelled. If a customer doesn’t show up, you keep the money. Card fees are paid by Ngopu.
       </p>
+    </Panel>
+  )
+}
+
+function CashPanel({ billing, terms, onSaved }: { billing: Billing; terms: Terms; onSaved: () => void }) {
+  const toast = useToast()
+  const [on, setOn] = useState(billing.acceptsCash)
+  const [busy, setBusy] = useState(false)
+  const change = async (v: boolean) => {
+    setBusy(true)
+    setOn(v)
+    try {
+      await api('partner/cash', { method: 'PATCH', json: { acceptsCash: v } })
+      toast(v ? 'Trusted customers can now pay cash at pickup' : 'Cash at pickup turned off')
+      onSaved()
+    } catch (e) {
+      setOn(!v)
+      toast(e instanceof Error ? e.message : 'Could not save.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Panel title="Cash at pickup" action={<Switch checked={on} onChange={change} disabled={busy} label="Accept cash at pickup" />}>
+      <p className="text-sm text-muted">
+        Let trusted customers (several collected orders, no missed pickups) reserve now and pay you in cash when they collect. You keep the cash; Ngopu’s{' '}
+        {terms.commissionPercent}% commission is taken from your card-sale payouts or sent to you as a payment request. If a cash customer doesn’t come, you
+        owe nothing.
+      </p>
+    </Panel>
+  )
+}
+
+const REQUEST_STATUS: Record<PaymentRequest['status'], ['warn' | 'good' | 'info' | 'neutral', string]> = {
+  open: ['warn', 'To pay'],
+  paid: ['good', 'Paid'],
+  settled: ['info', 'Taken from payouts'],
+  cancelled: ['neutral', 'Cancelled'],
+}
+
+function RequestsPanel({ requests }: { requests: PaymentRequest[] }) {
+  return (
+    <Panel title="Payment requests from Ngopu" className="mt-5">
+      <DataTable
+        rows={requests}
+        columns={[
+          { key: 'number', header: 'Number', render: (r) => <span className="font-medium">{r.number}</span> },
+          { key: 'date', header: 'Issued', render: (r) => shortDate(r.createdAt) },
+          { key: 'amount', header: 'Amount', align: 'right', render: (r) => <span className="font-semibold">{money(r.amount)}</span> },
+          { key: 'status', header: 'Status', render: (r) => <Pill tone={REQUEST_STATUS[r.status][0]}>{REQUEST_STATUS[r.status][1]}</Pill> },
+          {
+            key: 'view',
+            header: '',
+            render: (r) => (
+              <a href={`/api/partner/payment-requests/${r.id}`} target="_blank" rel="noreferrer" className="font-medium text-brand hover:underline">
+                View
+              </a>
+            ),
+          },
+        ]}
+      />
     </Panel>
   )
 }

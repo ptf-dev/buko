@@ -179,6 +179,27 @@ Defaults (editable in Finance → Settings): 20% commission, at least 60 L a bag
 
 **Phase 1 hook points:** `recordSale` is called where the order is created. With a real provider, create the order as `pending_payment`, and call `recordSale` from the verified payment webhook. Complaint refunds and cancellations must also call the provider's refund API. The ledger entries stay the same.
 
+## 9c. Built after Phase 0
+
+**Phase 1 preparation (backend, payment still simulated)**
+- `api/_lib/payments/providers.js`: one interface (`createPayment`, `refund`, `parseWebhook`, `fetchSettlements`). The `simulated` provider is the default, and there's a `pok` stub to fill in when the contract and API docs arrive.
+- `api/_lib/payments/service.js`: orders are created as `pending_payment` with the bag held for 10 minutes, and become `reserved` when the provider confirms. Declined or abandoned payments release the bag. A payment that arrives late gets the bag back if one is left, otherwise an automatic refund. Webhooks are signature-checked and processed once. Refunds go through a queue with retries. Chargebacks hold the amount from the store until resolved. Reconciliation compares the provider's settlement report with our payments and records processor fees.
+- Daily Vercel Cron `GET /api/cron/daily` (needs the `CRON_SECRET` env var). The same work also runs lazily during normal requests.
+- Admin → Finance → **Payments**: payments, refunds (retry failed ones), disputes, and a "check with provider" button.
+- To go live with POK: set `PAYMENT_PROVIDER=pok`, implement the adapter, add POK's webhook URL `https://www.ngopu.app/api/payments/webhook/pok`, and let the app open `payment.redirectUrl` when an order comes back pending.
+- Testing without a provider: `SIMULATE_ASYNC_PAYMENTS=1` plus `SIMULATED_WEBHOOK_SECRET` make payments wait for a signed test webhook.
+
+**Cash at pickup (from Phase 3)**
+- Offered to customers with at least 3 collected orders, no missed pickups in 180 days and no other cash order waiting, only at stores that switch it on (Earnings → Cash at pickup). All of these are editable in Finance → Settings.
+- Nothing moves at reservation. At pickup the ledger records the cash sale and the cash the store keeps, and the commission becomes owed to Ngopu. It's taken from card-sale payouts or requested (below). A cash no-show costs the store nothing and removes the customer's cash access.
+- Complaints on cash orders: there's no card to refund. The store gives the money back by hand, and Ngopu returns its commission on it.
+
+**Fee payment requests (simple Phase 2 billing)**
+- PayPal doesn't support Albanian lek, so stores that owe Ngopu get a numbered **payment request** (`NGP-2026-0001`). It's a printable page with Ngopu's IBAN, paid by bank transfer with the number as reference.
+- Admins record the payment (it becomes a `fee_payment` in the ledger) or cancel the request. Requests settle automatically when card-sale payouts cover the amount.
+- It's not a fiscal invoice: the fiscalised commission invoice still comes from the accountant or an e-invoice provider.
+- Set Ngopu's legal name, NIPT, bank and IBAN in Finance → Settings so they print on requests.
+
 ## 10. Decisions needed from you
 
 1. **Commission level:** 20% with a 60 L floor? Or a flat fee per bag like TGTG?

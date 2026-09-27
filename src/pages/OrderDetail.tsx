@@ -132,6 +132,11 @@ export function OrderDetail() {
             <p className="mt-1 text-sm font-semibold">
               {live ? 'Pickup window is open — head over now!' : `Pickup opens in ${timeUntil(order.pickupStart, now)}`}
             </p>
+            {order.paymentMethod === 'cash' && (
+              <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-ink">
+                Pay {formatPrice(total)} in cash when you collect
+              </p>
+            )}
           </div>
         )}
 
@@ -146,7 +151,15 @@ export function OrderDetail() {
             </div>
           </div>
         )}
-        {order.status === 'cancelled' && (
+        {order.status === 'cancelled' && order.paymentMethod === 'cash' && (
+          <p className="mt-4 rounded-2xl bg-line p-4 text-sm font-medium">
+            {order.cancelledBy === 'store'
+              ? `${store.name} had to cancel this order${order.cancelReason ? `: “${order.cancelReason}”` : ''}. We’re sorry.`
+              : 'This order was cancelled.'}{' '}
+            You weren’t charged.
+          </p>
+        )}
+        {order.status === 'cancelled' && order.paymentMethod !== 'cash' && (
           <p className="mt-4 rounded-2xl bg-line p-4 text-sm font-medium">
             {order.cancelledBy === 'store'
               ? `${store.name} had to cancel this order${order.cancelReason ? `: “${order.cancelReason}”` : ''}. We’re sorry. `
@@ -233,7 +246,7 @@ export function OrderDetail() {
         <div className="space-y-1.5">
           <Row label="Order number" value={`#${order.id.toUpperCase()}`} />
           <Row label="Reserved" value={new Date(order.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })} />
-          <Row label="Payment" value={payment?.detail ?? order.paymentMethod} />
+          <Row label="Payment" value={order.paymentMethod === 'cash' ? (order.status === 'collected' ? 'Paid in cash' : 'Cash at pickup') : (payment?.detail ?? order.paymentMethod)} />
           <Row label={`${order.quantity} × ${formatPrice(order.unitPrice)}`} value={formatPrice(total)} />
           <Row label="You save" value={formatPrice(saved)} highlight />
         </div>

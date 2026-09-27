@@ -19,6 +19,8 @@ export interface Review {
 
 export interface Store {
   id: string
+  /** The store lets trusted customers pay cash at pickup. */
+  acceptsCash?: boolean
   name: string
   branch?: string
   category: Category
@@ -66,6 +68,8 @@ export interface Order {
   cancelledBy?: 'customer' | 'store' | 'admin'
   /** Shown to the customer when the store cancelled. */
   cancelReason?: string
+  /** 'pending' while a card payment waits for the provider's confirmation. */
+  paymentStatus?: 'pending'
   /** A problem the customer reported after pickup. Amounts in qindarka (1 L = 100). */
   complaint?: { status: 'open' | 'refunded' | 'rejected'; refundAmount?: number }
   paymentMethod: PaymentMethod
@@ -74,7 +78,7 @@ export interface Order {
   collectedAt?: number
 }
 
-export type PaymentMethod = 'card' | 'apple-pay' | 'google-pay' | 'paypal'
+export type PaymentMethod = 'card' | 'apple-pay' | 'google-pay' | 'paypal' | 'cash'
 
 export interface UserProfile {
   name: string

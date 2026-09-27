@@ -1,9 +1,10 @@
-import { CreditCard, Loader2, Minus, Plus, Wallet } from 'lucide-react'
-import { useState } from 'react'
+import { Banknote, CreditCard, Loader2, Minus, Plus, Wallet } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthForm } from '../components/AuthForm'
 import { Button } from '../components/Button'
 import { Sheet } from '../components/Sheet'
+import { customerApi, type CashEligibility } from '../lib/api'
 import { formatPrice, formatRange } from '../lib/format'
 import type { Listing } from '../lib/search'
 import { MAX_PER_ORDER } from '../state/reducer'
@@ -23,6 +24,7 @@ export const PAYMENT_METHODS: {
     detail: 'Pay with your Google account',
   },
   { value: 'paypal', label: 'PayPal', detail: 'Log in to PayPal' },
+  { value: 'cash', label: 'Cash at pickup', detail: 'Pay the store when you collect' },
 ]
 
 export function CheckoutSheet({ open, onClose, listing }: { open: boolean; onClose: () => void; listing: Listing }) {
@@ -49,7 +51,24 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
   const navigate = useNavigate()
   const now = useNow()
   const [quantity, setQuantity] = useState(1)
-  const [method, setMethod] = useState<PaymentMethod>(savedMethod)
+  const { live } = useSync()
+  // Cash is offered only when the store takes it; whether this customer may use it comes from the server.
+  const [cash, setCash] = useState<CashEligibility | null>(null)
+  useEffect(() => {
+    if (!live || !store.acceptsCash) return
+    let alive = true
+    customerApi
+      .me()
+      .then((u) => alive && setCash(u?.cash ?? null))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [live, store.acceptsCash])
+  const cashOffered = live && !!store.acceptsCash
+  const cashAllowed = cashOffered && !!cash?.eligible
+  const [method, setMethod] = useState<PaymentMethod>(savedMethod === 'cash' ? 'card' : savedMethod)
+  const payingCash = method === 'cash' && cashAllowed
   const [agreed, setAgreed] = useState(false)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
@@ -61,7 +80,10 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
     setError('')
     try {
       // Payment is simulated; the reservation itself is real when the server is connected.
-      const [orderId] = await Promise.all([actions.reserve(store.id, quantity, method), new Promise((r) => setTimeout(r, 900))])
+      const [orderId] = await Promise.all([
+        actions.reserve(store.id, quantity, payingCash || method !== 'cash' ? method : 'card'),
+        new Promise((r) => setTimeout(r, 900)),
+      ])
       navigate(`/orders/${orderId}?new=1`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
@@ -86,6 +108,8 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
               <>
                 <Loader2 className="h-5 w-5 animate-spin" /> Processing…
               </>
+            ) : payingCash ? (
+              `Reserve · pay ${formatPrice(total)} at pickup`
             ) : (
               `Pay ${formatPrice(total)}`
             )}
@@ -132,28 +156,38 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
 
       <h3 className="mt-6 mb-2 font-semibold">Payment method</h3>
       <div className="space-y-2">
-        {PAYMENT_METHODS.map((m) => (
-          <label
-            key={m.value}
-            className={`flex cursor-pointer items-center gap-3 rounded-xl p-3 ring-1 ${
-              method === m.value ? 'bg-brand-light ring-brand' : 'ring-line'
-            }`}
-          >
-            <input
-              type="radio"
-              name="payment"
-              value={m.value}
-              checked={method === m.value}
-              onChange={() => setMethod(m.value)}
-              className="accent-[#00615f]"
-            />
-            {m.value === 'card' ? <CreditCard className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
-            <span className="flex-1">
-              <span className="block text-sm font-semibold">{m.label}</span>
-              <span className="block text-xs text-muted">{m.detail}</span>
-            </span>
-          </label>
-        ))}
+        {PAYMENT_METHODS.filter((m) => m.value !== 'cash' || cashOffered).map((m) => {
+          const off = m.value === 'cash' && !cashAllowed
+          return (
+            <label
+              key={m.value}
+              className={`flex items-center gap-3 rounded-xl p-3 ring-1 ${off ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${
+                method === m.value && !off ? 'bg-brand-light ring-brand' : 'ring-line'
+              }`}
+            >
+              <input
+                type="radio"
+                name="payment"
+                value={m.value}
+                checked={method === m.value && !off}
+                disabled={off}
+                onChange={() => setMethod(m.value)}
+                className="accent-[#00615f]"
+              />
+              {m.value === 'card' ? (
+                <CreditCard className="h-5 w-5" />
+              ) : m.value === 'cash' ? (
+                <Banknote className="h-5 w-5" />
+              ) : (
+                <Wallet className="h-5 w-5" />
+              )}
+              <span className="flex-1">
+                <span className="block text-sm font-semibold">{m.label}</span>
+                <span className="block text-xs text-muted">{off ? (cash?.reason ?? 'Checking…') : m.detail}</span>
+              </span>
+            </label>
+          )
+        })}
       </div>
 
       <div className="mt-6 space-y-1 text-sm">

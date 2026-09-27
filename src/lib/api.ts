@@ -82,6 +82,14 @@ export interface CustomerAccount {
   email: string
 }
 
+/** Whether the customer may pay cash at pickup, and why not. */
+export interface CashEligibility {
+  eligible: boolean
+  reason: string | null
+  collected: number
+  needed: number
+}
+
 export const customerApi = {
   stores: () => api<{ stores: Store[] }>('stores').then((r) => r.stores),
   orders: () => customer<{ orders: Order[] }>(`orders?deviceId=${deviceId()}`).then((r) => r.orders),
@@ -100,7 +108,7 @@ export const customerApi = {
     api<{ user: CustomerAccount; token: string }>('auth/signup', { method: 'POST', json: { name, email, password, deviceId: deviceId() } }),
   login: (email: string, password: string) =>
     api<{ user: CustomerAccount; token: string }>('auth/login', { method: 'POST', json: { email, password, client: 'app', deviceId: deviceId() } }),
-  me: () => customer<{ user: (CustomerAccount & { role: string }) | null }>('auth/me').then((r) => r.user),
+  me: () => customer<{ user: (CustomerAccount & { role: string; cash?: CashEligibility }) | null }>('auth/me').then((r) => r.user),
   logout: () => customer('auth/logout', { method: 'POST', json: {} }),
   rename: (name: string) => customer<{ user: CustomerAccount }>('auth/me', { method: 'PATCH', json: { name } }).then((r) => r.user),
   deleteAccount: () => customer('auth/me', { method: 'DELETE' }),
