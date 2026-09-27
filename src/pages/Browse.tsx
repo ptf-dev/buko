@@ -6,16 +6,18 @@ import { Button } from '../components/Button'
 import { FiltersSheet } from '../components/FiltersSheet'
 import { LocationButton } from '../components/LocationButton'
 import { MapView } from '../components/LazyMap'
+import { OutOfAreaNotice } from '../components/OutOfAreaNotice'
 import { EmptyState } from '../components/PageHeader'
 import { activeFilterCount, DEFAULT_FILTERS } from '../lib/search'
 import { useAppState, useDispatch, useNow } from '../state/store'
-import { useFilteredListings } from '../state/useListings'
+import { useFilteredListings, useListings } from '../state/useListings'
 
 export function Browse() {
   const now = useNow()
   const { filters, location } = useAppState()
   const dispatch = useDispatch()
   const results = useFilteredListings(now)
+  const { all } = useListings(now)
   const [params, setParams] = useSearchParams()
   const view = params.get('view') === 'map' ? 'map' : 'list'
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -92,6 +94,7 @@ export function Browse() {
 
       {view === 'list' ? (
         <div className="flex-1 overflow-y-auto">
+          <OutOfAreaNotice listings={all} className="mx-4 mt-3" />
           <p className="px-4 pt-3 text-sm text-muted">
             {results.length} {results.length === 1 ? 'store' : 'stores'} within {location.radiusKm} km
           </p>
@@ -121,6 +124,8 @@ export function Browse() {
             location={location}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            fitRadius
+            zoomControls
             className="absolute inset-0 z-0"
           />
           {selected && (

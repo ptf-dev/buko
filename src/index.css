@@ -47,6 +47,20 @@ body {
   color: var(--color-ink);
 }
 
+.store-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--color-brand);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  transform: translate(-50%, -50%);
+}
+.store-dot.off {
+  background: #9aa7a5;
+}
+
 .me-pin {
   width: 16px;
   height: 16px;

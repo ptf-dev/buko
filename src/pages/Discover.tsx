@@ -2,6 +2,7 @@ import { ChevronRight, Leaf, Search } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BagCard } from '../components/BagCard'
 import { LocationButton } from '../components/LocationButton'
+import { OutOfAreaNotice } from '../components/OutOfAreaNotice'
 import { EmptyState } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories'
@@ -49,7 +50,7 @@ export function Discover() {
   const { profile, favourites, orders } = useAppState()
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { nearby } = useListings(now)
+  const { all, nearby } = useListings(now)
   const available = nearby.filter((l) => l.store.bag.quantity > 0)
   const impact = computeImpact(orders)
 
@@ -91,6 +92,7 @@ export function Discover() {
         </button>
       </header>
 
+      <OutOfAreaNotice listings={all} className="mx-4 mb-4" />
       <div className="bg-white px-4 pb-4">
         <div className="relative overflow-hidden rounded-2xl bg-brand p-4 text-white">
           <p className="text-sm text-mint">{profile.name ? `Hi ${profile.name}!` : 'Hi there!'}</p>

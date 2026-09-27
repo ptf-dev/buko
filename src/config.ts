@@ -44,4 +44,16 @@ export const PLAY_STORE_URL: string = ''
 /** Direct Android download offered on the landing page while the Play Store listing is pending. */
 export const ANDROID_APK_PATH = '/downloads/ngopu.apk'
 
+/**
+ * Map tiles. OpenStreetMap's public servers are fine for launch-scale traffic; for heavier use
+ * switch to a keyed provider (e.g. MapTiler or Stadia) by changing this one value.
+ */
+export const MAP_TILES = {
+  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}
+
+/** Beyond this distance from every store, the app suggests switching to Tirana. */
+export const SERVICE_AREA_KM = 30
+
 export const RADIUS_OPTIONS_KM = [1, 2, 5, 10, 20]

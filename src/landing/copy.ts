@@ -30,8 +30,8 @@ const sq = {
     iosHint: ['Ke iPhone? Hap aplikacionin web, shtyp ', 'Share', ' → ', 'Add to Home Screen', ' dhe Ngopu punon si aplikacion i vërtetë.'],
   },
   hero: {
-    line1: 'Ushqim i mirë.',
-    line2: 'I shpëtuar',
+    line1: 'Ngopu.',
+    line2: 'Me 70% ulje',
     sub: ['Çanta Surprizë me ushqim të shijshëm të pashitur nga furrat, restorantet dhe dyqanet më të mira pranë teje, me ', 'një të tretën e çmimit', '. Së shpejti në Tiranë.'],
     chipPrice: '350 L në vend të 1,050 L',
     chipCo2: '2.7 kg CO₂e të kursyera',
@@ -179,8 +179,8 @@ const en: Copy = {
     iosHint: ['On iPhone? Open the web app, tap ', 'Share', ' → ', 'Add to Home Screen', ' and Ngopu works just like an app.'],
   },
   hero: {
-    line1: 'Good food.',
-    line2: 'Rescued',
+    line1: 'Eat your fill.',
+    line2: 'Up to 70% off',
     sub: ['Surprise Bags of delicious unsold food from the best bakeries, restaurants and shops near you, at a ', 'third of the price', '. Launching soon in Tirana.'],
     chipPrice: '350 L instead of 1,050 L',
     chipCo2: '2.7 kg CO₂e saved',

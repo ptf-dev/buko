@@ -4,6 +4,7 @@ import {
   Clock,
   Leaf,
   MapPin,
+  Maximize2,
   Navigation,
   Share2,
   ShoppingBag,
@@ -16,6 +17,7 @@ import { BagArt, StoreLogo } from '../components/BagArt'
 import { QuantityPill } from '../components/BagCard'
 import { Button } from '../components/Button'
 import { FavouriteButton } from '../components/FavouriteButton'
+import { Sheet } from '../components/Sheet'
 import { MapView } from '../components/LazyMap'
 import { EmptyState } from '../components/PageHeader'
 import { CATEGORIES, DIET_LABELS } from '../data/categories'
@@ -34,6 +36,7 @@ export function StoreDetail() {
   const listing = all.find((l) => l.store.id === id)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [shared, setShared] = useState(false)
+  const [mapOpen, setMapOpen] = useState(false)
 
   if (!listing) {
     return (
@@ -52,6 +55,14 @@ export function StoreDetail() {
   const activeOrder = orders.find((o) => o.storeId === store.id && o.status === 'reserved')
   const meta = CATEGORIES[store.category]
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${store.lat},${store.lng}`
+  // Show you and the store together when you're in the same area; otherwise just the store.
+  const meNearby = distance <= 15
+  const mapPoints: [number, number][] = meNearby
+    ? [
+        [store.lat, store.lng],
+        [location.lat, location.lng],
+      ]
+    : [[store.lat, store.lng]]
 
   const share = async () => {
     const result = await shareContent({
@@ -145,9 +156,25 @@ export function StoreDetail() {
           </div>
           <Navigation className="h-5 w-5 text-brand" />
         </a>
-        <div className="mt-3 h-36 overflow-hidden rounded-xl">
-          <MapView listings={[listing]} location={{ ...location, lat: store.lat, lng: store.lng }} interactive={false} zoom={15} className="h-full w-full" />
-        </div>
+        <button
+          type="button"
+          onClick={() => setMapOpen(true)}
+          aria-label={`Open map of ${store.name}`}
+          className="relative mt-3 block h-44 w-full overflow-hidden rounded-xl ring-1 ring-line"
+        >
+          <MapView
+            listings={[listing]}
+            location={{ ...location, lat: store.lat, lng: store.lng }}
+            interactive={false}
+            showRadius={false}
+            me={meNearby ? { lat: location.lat, lng: location.lng } : null}
+            fitPoints={mapPoints}
+            className="pointer-events-none h-full w-full"
+          />
+          <span className="absolute right-2.5 bottom-2.5 z-[500] flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow">
+            <Maximize2 className="h-3.5 w-3.5" /> Open map
+          </span>
+        </button>
       </section>
 
       <section className="mt-2 bg-white px-4 py-4">
@@ -213,6 +240,39 @@ export function StoreDetail() {
           </Button>
         )}
       </div>
+
+      <Sheet
+        open={mapOpen}
+        onClose={() => setMapOpen(false)}
+        title={store.name}
+        footer={
+          <a href={mapsUrl} target="_blank" rel="noreferrer" className="block">
+            <Button className="w-full">
+              <Navigation className="h-5 w-5" /> Get directions · {formatDistance(distance)}
+            </Button>
+          </a>
+        }
+      >
+        <p className="-mt-1 mb-3 text-sm text-muted">{store.address}</p>
+        <div className="relative h-[60vh] overflow-hidden rounded-2xl ring-1 ring-line">
+          {mapOpen && (
+            <MapView
+              listings={[listing]}
+              location={{ ...location, lat: store.lat, lng: store.lng }}
+              showRadius={false}
+              me={meNearby ? { lat: location.lat, lng: location.lng } : null}
+              fitPoints={mapPoints}
+              zoomControls
+              className="absolute inset-0 z-0"
+            />
+          )}
+        </div>
+        {meNearby && (
+          <p className="mt-2 flex items-center gap-2 text-xs text-muted">
+            <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-[#2f7cf6] shadow" aria-hidden /> {location.label}
+          </p>
+        )}
+      </Sheet>
 
       <CheckoutSheet open={checkoutOpen} onClose={() => setCheckoutOpen(false)} listing={listing} />
     </div>
