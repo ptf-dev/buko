@@ -3,17 +3,21 @@ import { createSession, currentUser, destroySession, hashPassword, newId, requir
 import { HttpError, query, tx } from './db.js'
 import { resolveWindow, TIMEZONE } from './time.js'
 import { deviceId, email, int, num, oneOf, optStr, password, str } from './validate.js'
-import { COMPLAINT_REASONS, COMPLAINT_WINDOW_HOURS, recordCancellation, recordClose, recordSale } from './finance.js'
+import { cashEligibility, COMPLAINT_REASONS, COMPLAINT_WINDOW_HOURS, recordCancellation, recordCashCollected, recordClose, recordSale } from './finance.js'
+import { queueRefund } from './payments/queue.js'
+import { expirePendingPayments, processRefunds, startPayment } from './payments/service.js'
 import { FINANCE_ROUTES } from './finance-routes.js'
 
 /**
- * @typedef {{ req: Request, url: URL, params: Record<string, string>, body: any, secure: boolean }} Ctx
+ * @typedef {{ req: Request, url: URL, params: Record<string, string>, body: any, raw?: string, secure: boolean }} Ctx
  * @typedef {{ status?: number, body?: unknown, text?: string, headers?: Record<string, string> }} Result
  * @typedef {(ctx: Ctx) => Promise<Result>} Handler
  */
 
 const CATEGORIES = ['meals', 'bakery', 'groceries', 'dessert', 'drinks', 'other']
-const PAYMENT_METHODS = ['card', 'apple-pay', 'google-pay', 'paypal']
+const PAYMENT_METHODS = ['card', 'apple-pay', 'google-pay', 'paypal', 'cash']
+/** Orders a store should see and count: paid (or cash) reservations and their outcomes. */
+const LIVE_ORDER = "status in ('reserved','collected','no_show')"
 const RATING_TAGS = ['Great value', 'Great quantity', 'Great quality', 'Friendly staff', 'Easy pickup']
 const MAX_PER_ORDER = 4
 const CANCEL_CUTOFF_MS = 2 * 60 * 60_000
@@ -24,9 +28,11 @@ const CANCEL_CUTOFF_MS = 2 * 60 * 60_000
 
 const STORE_SELECT = `
   select s.*, b.id as bag_id, b.title, b.description, b.price, b.original_price, b.quantity,
-         b.pickup_day, b.pickup_start, b.pickup_end, b.diet, b.allergens_note, b.is_new, b.paused, b.updated_at as bag_updated_at
+         b.pickup_day, b.pickup_start, b.pickup_end, b.diet, b.allergens_note, b.is_new, b.paused, b.updated_at as bag_updated_at,
+         coalesce(bi.accepts_cash, false) as accepts_cash
     from stores s
-    left join bags b on b.store_id = s.id`
+    left join bags b on b.store_id = s.id
+    left join store_billing bi on bi.store_id = s.id`
 
 /** @param {any} r */
 function toStore(r) {
@@ -42,6 +48,7 @@ function toStore(r) {
     ratingCount: r.rating_count,
     highlights: r.highlights,
     reviews: r.reviews,
+    acceptsCash: r.accepts_cash || undefined,
     bag: {
       id: r.bag_id,
       title: r.title,
@@ -89,7 +96,8 @@ function toOrder(r) {
     pickupCode: r.pickup_code,
     createdAt: new Date(r.created_at).getTime(),
     // A no-show is closed on the server; the apps already show a reserved order past its window as "missed".
-    status: r.status === 'no_show' ? 'reserved' : r.status,
+    status: r.status === 'no_show' || r.status === 'pending_payment' ? 'reserved' : r.status,
+    paymentStatus: r.status === 'pending_payment' ? 'pending' : undefined,
     cancelledBy: r.cancelled_by ?? undefined,
     cancelReason: r.cancelled_by === 'store' ? (r.cancel_reason ?? undefined) : undefined,
     complaint: r.complaint_status ? { status: r.complaint_status, refundAmount: r.complaint_refund ?? undefined } : undefined,
@@ -151,20 +159,33 @@ async function listStores() {
   return { body: { stores: rows.map(toStore) }, headers: { 'Cache-Control': 'no-store' } }
 }
 
-/** @type {Handler} */
+/**
+ * Reserves bags. Card orders wait in pending_payment (bag held) until the payment provider confirms; with the
+ * simulated provider that happens at once. Cash orders are reserved straight away for trusted customers.
+ * @type {Handler}
+ */
 async function createOrder({ req, body }) {
   const storeId = str(body.storeId, 'Store', { max: 80 })
   const quantity = int(body.quantity, 'Quantity', 1, MAX_PER_ORDER)
   const payment = oneOf(body.paymentMethod, 'Payment method', PAYMENT_METHODS)
   const { device, userId } = await customerContext(req, body.deviceId)
   if (!userId) throw new HttpError(401, 'Log in or create an account to reserve.')
-  const order = await tx(async (c) => {
+  const cash = payment === 'cash'
+  if (cash) {
+    const e = await cashEligibility(userId)
+    if (!e.eligible) throw new HttpError(403, e.reason ?? 'Cash at pickup isn’t available for this order.')
+  }
+  await expirePendingPayments()
+  const created = await tx(async (c) => {
     const { rows } = await c.query(
-      `select b.*, s.status from bags b join stores s on s.id = b.store_id where b.store_id = $1 for update of b`,
+      `select b.*, s.status, coalesce(bi.accepts_cash, false) as accepts_cash
+         from bags b join stores s on s.id = b.store_id left join store_billing bi on bi.store_id = b.store_id
+        where b.store_id = $1 for update of b`,
       [storeId],
     )
     const bag = rows[0]
     if (!bag || bag.status !== 'active') throw new HttpError(404, 'This store isn’t available.')
+    if (cash && !bag.accepts_cash) throw new HttpError(409, 'This store doesn’t take cash. Pay by card instead.')
     if (bag.paused || bag.quantity < quantity)
       throw new HttpError(409, bag.quantity > 0 && !bag.paused ? `Only ${bag.quantity} left.` : 'Sold out — someone got there first.')
     const now = Date.now()
@@ -172,14 +193,27 @@ async function createOrder({ req, body }) {
     await c.query('update bags set quantity = quantity - $1, updated_at = now() where store_id = $2', [quantity, storeId])
     const ins = await c.query(
       `insert into orders (id, store_id, bag_id, device_id, user_id, quantity, unit_price, unit_original_price, pickup_start, pickup_end, pickup_code, status, payment_method)
-       values ($1,$2,$3,$4,$12,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,'reserved',$11) returning *`,
-      [newId(), storeId, bag.id, device, quantity, bag.price, bag.original_price, start, end, pickupCode(), payment, userId],
+       values ($1,$2,$3,$4,$12,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,$13,$11) returning *`,
+      [newId(), storeId, bag.id, device, quantity, bag.price, bag.original_price, start, end, pickupCode(), payment, userId, cash ? 'reserved' : 'pending_payment'],
     )
-    // Payment is simulated for now; the sale is recorded as if the card was charged.
-    await recordSale(c, ins.rows[0])
-    return ins.rows[0]
+    const order = ins.rows[0]
+    let paymentId = null
+    if (!cash) {
+      paymentId = newId('pay_')
+      await c.query(`insert into payments (id, order_id, provider, amount, status) values ($1,$2,$3,$4,'pending')`, [
+        paymentId,
+        order.id,
+        process.env.PAYMENT_PROVIDER ?? 'simulated',
+        quantity * bag.price * 100,
+      ])
+    }
+    return { order, paymentId }
   })
-  return { status: 201, body: { order: toOrder(order) } }
+  if (!created.paymentId) return { status: 201, body: { order: toOrder(created.order) } }
+  const { rows: u } = await query('select email from users where id = $1', [userId])
+  const started = await startPayment(created.order, created.paymentId, u[0]?.email ?? null)
+  // redirectUrl is set when the customer must finish paying on the provider's page (real providers).
+  return { status: 201, body: { order: toOrder(started.order), payment: { redirectUrl: started.redirectUrl } } }
 }
 
 /** @type {Handler} */
@@ -188,7 +222,8 @@ async function deviceOrders({ req, url }) {
   const { rows } = await query(
     `select o.*, k.status as complaint_status, k.refund_amount as complaint_refund
        from orders o left join complaints k on k.order_id = o.id
-      where (o.user_id is null and o.device_id = $1) or ($2::text is not null and o.user_id = $2) order by o.created_at desc limit 100`,
+      where ((o.user_id is null and o.device_id = $1) or ($2::text is not null and o.user_id = $2)) and o.status <> 'expired'
+      order by o.created_at desc limit 100`,
     [device, userId],
   )
   return { body: { orders: rows.map(toOrder) } }
@@ -216,9 +251,13 @@ async function cancelOrder({ req, params, body }) {
       `update orders set status = 'cancelled', cancelled_at = now(), closed_at = now(), cancelled_by = 'customer' where id = $1 returning *`,
       [o.id],
     )
-    await recordCancellation(c, up.rows[0])
+    if (o.payment_method !== 'cash') {
+      await recordCancellation(c, up.rows[0])
+      await queueRefund(c, o.id, o.quantity * o.unit_price * 100, 'Cancelled by the customer')
+    }
     return up.rows[0]
   })
+  await processRefunds()
   return { body: { order: toOrder(order) } }
 }
 
@@ -237,13 +276,16 @@ async function markCollected(id) {
   return tx(async (c) => {
     const { rows } = await c.query('select * from orders where id = $1 for update', [id])
     const o = rows[0]
-    if (o.status === 'cancelled') throw new HttpError(409, 'This order was cancelled.')
+    if (o.status === 'cancelled' || o.status === 'expired') throw new HttpError(409, 'This order was cancelled.')
+    if (o.status === 'pending_payment') throw new HttpError(409, 'This order hasn’t been paid yet.')
     if (o.status === 'collected') return o
     const up = await c.query(
       `update orders set status = 'collected', collected_at = coalesce(collected_at, now()), closed_at = coalesce(closed_at, now()) where id = $1 returning *`,
       [id],
     )
-    if (o.status === 'reserved') await recordClose(c, up.rows[0])
+    // Cash no-shows recorded nothing, so a late cash pickup is recorded now; card no-shows were settled already.
+    if (o.payment_method === 'cash') await recordCashCollected(c, up.rows[0])
+    else if (o.status === 'reserved') await recordClose(c, up.rows[0])
     return up.rows[0]
   })
 }
@@ -307,6 +349,7 @@ const publicUser = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.rol
 /** @type {Handler} */
 async function me({ req }) {
   const user = await currentUser(req)
+  if (user?.role === 'customer') return { body: { user: { ...publicUser(user), cash: await cashEligibility(user.id) } } }
   return { body: { user: user ? publicUser(user) : null } }
 }
 
@@ -460,8 +503,8 @@ async function dailySeries(days, storeId) {
        select generate_series((now() at time zone $1)::date - ($2::int - 1), (now() at time zone $1)::date, interval '1 day')::date as day
      )
      select to_char(d.day, 'YYYY-MM-DD') as day,
-            coalesce(sum(o.quantity) filter (where o.status <> 'cancelled'), 0)::int as bags,
-            coalesce(sum(o.quantity * o.unit_price) filter (where o.status <> 'cancelled'), 0)::int as revenue,
+            coalesce(sum(o.quantity) filter (where o.status in ('reserved','collected','no_show')), 0)::int as bags,
+            coalesce(sum(o.quantity * o.unit_price) filter (where o.status in ('reserved','collected','no_show')), 0)::int as revenue,
             coalesce(sum(o.quantity) filter (where o.status = 'collected'), 0)::int as collected
        from d
        left join orders o on (o.created_at at time zone $1)::date = d.day and ($3::text is null or o.store_id = $3)
@@ -486,7 +529,7 @@ async function periodTotals(days, storeId) {
        coalesce(sum(quantity) filter (where created_at < now() - make_interval(days => $1) and created_at >= now() - make_interval(days => $1 * 2)), 0)::int as prev_bags,
        coalesce(sum(quantity * unit_price) filter (where created_at < now() - make_interval(days => $1) and created_at >= now() - make_interval(days => $1 * 2)), 0)::int as prev_revenue
      from orders
-     where status <> 'cancelled' and ($2::text is null or store_id = $2)`,
+     where ${LIVE_ORDER} and ($2::text is null or store_id = $2)`,
     [days, storeId],
   )
   return rows[0]
@@ -518,7 +561,7 @@ async function partnerOverview({ req }) {
     dailySeries(14, store.id),
     periodTotals(7, store.id),
     query(
-      `select * from orders where store_id = $1 and status <> 'cancelled' and pickup_end >= now() - interval '12 hours' order by pickup_start, created_at`,
+      `select * from orders where store_id = $1 and ${LIVE_ORDER} and pickup_end >= now() - interval '12 hours' order by pickup_start, created_at`,
       [store.id],
     ),
   ])
@@ -532,7 +575,7 @@ async function partnerOrders({ req, url }) {
   const { rows } = await query(
     `select o.*, k.status as complaint_status, k.refund_amount as complaint_refund
        from orders o left join complaints k on k.order_id = o.id
-      where o.store_id = $1 and ($2::text is null or o.status = $2 or ($2 = 'reserved' and o.status = 'no_show'))
+      where o.store_id = $1 and o.status not in ('pending_payment','expired') and ($2::text is null or o.status = $2 or ($2 = 'reserved' and o.status = 'no_show'))
       order by o.created_at desc limit 300`,
     [user.storeId, status && ['reserved', 'collected', 'cancelled'].includes(status) ? status : null],
   )
@@ -616,13 +659,14 @@ async function partnerValidate({ req, body }) {
   const user = await requireUser(req, 'partner')
   requireActive(user)
   const code = str(body.code, 'Pickup code', { min: 6, max: 6 }).toUpperCase()
-  const { rows } = await query(`select * from orders where store_id = $1 and pickup_code = $2 order by created_at desc limit 1`, [
+  const { rows } = await query(`select * from orders where store_id = $1 and pickup_code = $2 and status <> 'expired' order by created_at desc limit 1`, [
     user.storeId,
     code,
   ])
   const o = rows[0]
   if (!o) throw new HttpError(404, 'No order with that code at your store.')
-  if (o.status === 'cancelled') throw new HttpError(409, 'That order was cancelled.')
+  if (o.status === 'cancelled' || o.status === 'expired') throw new HttpError(409, 'That order was cancelled.')
+  if (o.status === 'pending_payment') throw new HttpError(409, 'That order hasn’t been paid yet. Don’t hand over the bag.')
   if (o.status === 'collected') return { body: { order: toOrder(o), alreadyCollected: true } }
   return { body: { order: toOrder(await markCollected(o.id)), alreadyCollected: false } }
 }
@@ -651,7 +695,7 @@ async function adminOverview({ req, url }) {
       `select s.id, s.name, s.branch, s.category, s.rating,
               coalesce(sum(o.quantity), 0)::int as bags, coalesce(sum(o.quantity * o.unit_price), 0)::int as revenue
          from stores s
-         left join orders o on o.store_id = s.id and o.status <> 'cancelled' and o.created_at >= now() - make_interval(days => $1)
+         left join orders o on o.store_id = s.id and o.status in ('reserved','collected','no_show') and o.created_at >= now() - make_interval(days => $1)
         where s.status = 'active'
         group by s.id order by bags desc, s.rating desc limit 5`,
       [days],
@@ -666,8 +710,8 @@ async function adminStores({ req }) {
   const { rows } = await query(
     `${STORE_SELECT.replace(
       'from stores s',
-      `, (select coalesce(sum(o.quantity), 0)::int from orders o where o.store_id = s.id and o.status <> 'cancelled' and o.created_at >= now() - interval '30 days') as bags_30d,
-         (select coalesce(sum(o.quantity * o.unit_price), 0)::int from orders o where o.store_id = s.id and o.status <> 'cancelled' and o.created_at >= now() - interval '30 days') as revenue_30d
+      `, (select coalesce(sum(o.quantity), 0)::int from orders o where o.store_id = s.id and o.status in ('reserved','collected','no_show') and o.created_at >= now() - interval '30 days') as bags_30d,
+         (select coalesce(sum(o.quantity * o.unit_price), 0)::int from orders o where o.store_id = s.id and o.status in ('reserved','collected','no_show') and o.created_at >= now() - interval '30 days') as revenue_30d
        from stores s`,
     )} order by s.created_at desc`,
   )
@@ -682,7 +726,7 @@ async function adminStore({ req, params }) {
   const [series, totals, orders, users] = await Promise.all([
     dailySeries(14, params.id),
     periodTotals(30, params.id),
-    query(`select * from orders where store_id = $1 order by created_at desc limit 50`, [params.id]),
+    query(`select * from orders where store_id = $1 and status not in ('pending_payment','expired') order by created_at desc limit 50`, [params.id]),
     query(`select id, name, email, last_login_at as "lastLoginAt" from users where store_id = $1`, [params.id]),
   ])
   return { body: { store: toManagedStore(rows[0]), series, totals, orders: orders.rows.map(toOrder), users: users.rows } }
@@ -706,7 +750,7 @@ async function adminOrders({ req, url }) {
   const status = url.searchParams.get('status')
   const { rows } = await query(
     `select o.*, s.name as store_name from orders o join stores s on s.id = o.store_id
-      where ($1::text is null or o.status = $1 or ($1 = 'reserved' and o.status = 'no_show')) order by o.created_at desc limit 500`,
+      where o.status not in ('pending_payment','expired') and ($1::text is null or o.status = $1 or ($1 = 'reserved' and o.status = 'no_show')) order by o.created_at desc limit 500`,
     [status && ['reserved', 'collected', 'cancelled'].includes(status) ? status : null],
   )
   return { body: { orders: rows.map(toOrder) } }

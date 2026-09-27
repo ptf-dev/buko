@@ -290,6 +290,100 @@ const MIGRATIONS = [
        where status = 'collected';
     `)
   },
+  // 3: real payments (provider-ready), cash at pickup, fee payment requests.
+  async (c) => {
+    await c.query(`
+      alter table orders drop constraint if exists orders_status_check;
+      alter table orders add constraint orders_status_check
+        check (status in ('pending_payment','reserved','collected','cancelled','no_show','expired'));
+      create index if not exists orders_pending_idx on orders (created_at) where status = 'pending_payment';
+
+      alter table ledger_entries drop constraint if exists ledger_entries_type_check;
+      alter table ledger_entries add constraint ledger_entries_type_check check (type in (
+        'sale','cancellation','commission','commission_reversal','complaint_refund','goodwill_refund','adjustment',
+        'membership_fee','payout','cash_sale','cash_collected','fee_payment','chargeback_hold','chargeback_release','processor_fee'));
+
+      alter table store_billing add column if not exists accepts_cash boolean not null default false;
+
+      -- One card payment per order, as the provider sees it. Amounts in qindarka.
+      create table payments (
+        id text primary key,
+        order_id text not null unique references orders(id) on delete cascade,
+        provider text not null,
+        provider_ref text,
+        amount integer not null,
+        currency text not null default 'ALL',
+        status text not null check (status in ('pending','succeeded','failed','expired')),
+        refunded integer not null default 0,
+        fee integer,
+        failure text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create unique index payments_provider_ref on payments (provider, provider_ref) where provider_ref is not null;
+
+      -- Refunds are queued in the same transaction as the ledger entry, then sent to the provider (retried on failure).
+      create table refunds (
+        id text primary key,
+        payment_id text not null references payments(id) on delete cascade,
+        order_id text not null references orders(id) on delete cascade,
+        amount integer not null check (amount > 0),
+        reason text not null,
+        status text not null default 'queued' check (status in ('queued','sent','succeeded','failed')),
+        provider_ref text,
+        attempts integer not null default 0,
+        last_error text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create index refunds_status_idx on refunds (status);
+
+      create table disputes (
+        id text primary key,
+        payment_id text not null references payments(id) on delete cascade,
+        order_id text not null references orders(id) on delete cascade,
+        store_id text not null references stores(id),
+        amount integer not null,
+        status text not null default 'open' check (status in ('open','won','lost')),
+        provider_ref text,
+        created_at timestamptz not null default now(),
+        resolved_at timestamptz
+      );
+
+      -- Every provider event we processed, so a retried webhook is handled once.
+      create table webhook_events (
+        provider text not null,
+        event_id text not null,
+        type text not null,
+        payload jsonb,
+        received_at timestamptz not null default now(),
+        primary key (provider, event_id)
+      );
+
+      -- "Please pay Ngopu" requests for fees a store owes (e.g. commission on cash orders). Paid by bank transfer.
+      create sequence if not exists payment_request_seq;
+      create table payment_requests (
+        id text primary key,
+        number text not null unique,
+        store_id text not null references stores(id),
+        amount integer not null check (amount > 0),
+        status text not null default 'open' check (status in ('open','paid','settled','cancelled')),
+        due_at timestamptz not null,
+        paid_at timestamptz,
+        reference text,
+        note text,
+        created_by text,
+        created_at timestamptz not null default now()
+      );
+      create index payment_requests_store_idx on payment_requests (store_id, created_at desc);
+
+      -- Historical orders were "paid" by the simulated provider.
+      insert into payments (id, order_id, provider, provider_ref, amount, status, refunded, created_at)
+      select 'pay_' || id, id, 'simulated', 'sim_' || id, quantity * unit_price * 100, 'succeeded',
+             case when status = 'cancelled' then quantity * unit_price * 100 else 0 end, created_at
+        from orders where payment_method <> 'cash';
+    `)
+  },
 ]
 
 /** @type {Promise<void> | null} */

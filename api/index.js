@@ -53,7 +53,16 @@ export async function handle(req) {
 
   const url = new URL(req.url)
   let body = {}
-  if (req.method !== 'GET' && req.method !== 'DELETE') {
+  let raw = ''
+  // Payment provider webhooks: any content type, raw body kept for signature checks. No cookies are used there.
+  if (req.method === 'POST' && path.startsWith('payments/webhook/')) {
+    raw = await req.text()
+    try {
+      body = raw ? JSON.parse(raw) : {}
+    } catch {
+      body = {}
+    }
+  } else if (req.method !== 'GET' && req.method !== 'DELETE') {
     // JSON only: a cross-site HTML form can't send it, which (with SameSite cookies) blocks CSRF.
     if (!(req.headers.get('content-type') || '').includes('application/json'))
       return json({ error: 'Send the request body as JSON.' }, 415, cors)
@@ -68,7 +77,7 @@ export async function handle(req) {
 
   try {
     const secure = url.protocol === 'https:' || req.headers.get('x-forwarded-proto') === 'https'
-    const result = await found.handler({ req, url, params: found.params, body, secure })
+    const result = await found.handler({ req, url, params: found.params, body, raw, secure })
     // Downloads (CSV exports, statements) come back as text with their own content type.
     if (result.text !== undefined)
       return new Response(result.text, { status: result.status ?? 200, headers: { 'Cache-Control': 'no-store', ...cors, ...(result.headers ?? {}) } })

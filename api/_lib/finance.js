@@ -10,6 +10,7 @@
 import { HttpError, query, tx } from './db.js'
 import { newId } from './auth.js'
 import { TIMEZONE } from './time.js'
+import { queueRefund } from './payments/queue.js'
 
 /**
  * @typedef {{ query: (text: string, params?: unknown[]) => Promise<any> }} Db
@@ -35,6 +36,24 @@ export const DEFAULT_SETTINGS = {
   payoutAnchor: '2026-01-05',
   /** New bank details can't be paid to until this many hours after approval (fraud control). */
   bankChangeHoldHours: 48,
+
+  /** Cash at pickup, for trusted customers at stores that opt in. */
+  cashEnabled: true,
+  /** Collected orders a customer needs before cash is offered. */
+  cashMinCollected: 3,
+  /** No-shows allowed in the last 180 days. */
+  cashMaxNoShows: 0,
+  /** Cash reservations a customer may have waiting at once. */
+  cashMaxOpen: 1,
+
+  /** Payment requests for fees a store owes (e.g. commission on cash orders). */
+  feeRequestMinLek: 500,
+  feeRequestDueDays: 14,
+  /** Ngopu's own details, printed on payment requests. */
+  ngopuLegalName: 'Ngopu',
+  ngopuNipt: '',
+  ngopuBank: '',
+  ngopuIban: '',
 }
 
 const Q = { query }
@@ -147,6 +166,23 @@ export async function recordClose(c, o, settings) {
   await c.query(`update ledger_entries set eligible_at = $2 where order_id = $1 and type = 'sale' and eligible_at is null`, [o.id, eligible])
 }
 
+/**
+ * A cash order was collected: the customer paid the store directly, so nothing is owed to the store for it,
+ * but Ngopu's commission is. It's taken from the store's next payout, or paid with a payment request.
+ * @param {Db} c @param {any} o @param {Settings} [settings]
+ */
+export async function recordCashCollected(c, o, settings) {
+  const total = orderTotal(o)
+  await c.query(
+    `insert into ledger_entries (store_id, order_id, type, store_delta, eligible_at, note, is_demo) values
+       ($1,$2,'cash_sale',$3,now(),'Paid in cash at pickup',$4),
+       ($1,$2,'cash_collected',$5,now(),'Kept by the store',$4)
+     ${ONCE}`,
+    [o.store_id, o.id, total, o.is_demo, -total],
+  )
+  await recordClose(c, o, settings)
+}
+
 let lastSettle = 0
 
 /**
@@ -165,7 +201,8 @@ export async function settleNoShows(force = false) {
         returning *`,
       [s.noShowGraceMinutes],
     )
-    for (const o of rows) await recordClose(c, o, s)
+    // A cash no-show paid nothing, so there is no sale and no commission; it counts against the customer's trust.
+    for (const o of rows) if (o.payment_method !== 'cash') await recordClose(c, o, s)
     return rows.length
   })
 }
@@ -185,7 +222,10 @@ export async function storeCancelOrder(storeId, orderId, reason, actor) {
         where id = $1 returning *`,
       [o.id, reason],
     )
-    await recordCancellation(c, up.rows[0])
+    if (o.payment_method !== 'cash') {
+      await recordCancellation(c, up.rows[0])
+      await queueRefund(c, o.id, orderTotal(o), 'Cancelled by the store')
+    }
     await audit(c, actor, 'order.store_cancel', o.id, { reason })
     return up.rows[0]
   })
@@ -208,7 +248,7 @@ export const COMPLAINT_WINDOW_HOURS = 24
 export async function resolveComplaint(id, actor, d) {
   return tx(async (c) => {
     const { rows } = await c.query(
-      `select k.*, o.quantity, o.unit_price, o.is_demo from complaints k join orders o on o.id = k.order_id where k.id = $1 for update of k`,
+      `select k.*, o.quantity, o.unit_price, o.is_demo, o.payment_method from complaints k join orders o on o.id = k.order_id where k.id = $1 for update of k`,
       [id],
     )
     const k = rows[0]
@@ -227,6 +267,9 @@ export async function resolveComplaint(id, actor, d) {
     const amount = d.amount ?? total
     if (amount <= 0 || amount > total) throw new HttpError(400, 'The refund must be more than 0 and at most the order total.')
     const s = await getSettings(c)
+    const cash = k.payment_method === 'cash'
+    // Card orders are refunded to the card. For cash orders the store (or Ngopu, by hand) pays the customer back.
+    if (!cash) await queueRefund(c, k.order_id, amount, `Complaint ${id}`)
     if (d.fundedBy === 'ngopu') {
       await c.query(
         `insert into ledger_entries (store_id, order_id, complaint_id, type, platform_delta, vat, eligible_at, note, created_by, is_demo)
@@ -234,11 +277,12 @@ export async function resolveComplaint(id, actor, d) {
         [k.store_id, k.order_id, id, -amount, d.note, actor, k.is_demo],
       )
     } else {
-      await c.query(
-        `insert into ledger_entries (store_id, order_id, complaint_id, type, store_delta, eligible_at, note, created_by, is_demo)
-         values ($1,$2,$3,'complaint_refund',$4,now(),$5,$6,$7) ${ONCE}`,
-        [k.store_id, k.order_id, id, -amount, d.note, actor, k.is_demo],
-      )
+      if (!cash)
+        await c.query(
+          `insert into ledger_entries (store_id, order_id, complaint_id, type, store_delta, eligible_at, note, created_by, is_demo)
+           values ($1,$2,$3,'complaint_refund',$4,now(),$5,$6,$7) ${ONCE}`,
+          [k.store_id, k.order_id, id, -amount, d.note, actor, k.is_demo],
+        )
       // Give back the commission on the refunded share.
       const { rows: com } = await c.query(`select platform_delta, vat from ledger_entries where order_id = $1 and type = 'commission'`, [k.order_id])
       if (com[0]) {
@@ -501,8 +545,12 @@ export async function balances(storeId = null) {
 export async function summary(from, to, storeId = null) {
   const { rows } = await query(
     `select
-       coalesce(sum(store_delta) filter (where type = 'sale'), 0)::int as gross,
+       coalesce(sum(store_delta) filter (where type in ('sale','cash_sale')), 0)::int as gross,
+       coalesce(sum(store_delta) filter (where type = 'cash_sale'), 0)::int as cash_sales,
        coalesce(-sum(store_delta) filter (where type = 'cancellation'), 0)::int as cancelled,
+       coalesce(sum(store_delta) filter (where type = 'fee_payment'), 0)::int as fee_payments,
+       coalesce(-sum(platform_delta) filter (where type = 'processor_fee'), 0)::int as processor_fees,
+       coalesce(-sum(store_delta) filter (where type in ('chargeback_hold','chargeback_release')), 0)::int as chargebacks,
        coalesce(-sum(store_delta) filter (where type = 'complaint_refund'), 0)::int as complaint_refunds,
        coalesce(sum(platform_delta) filter (where type in ('commission','commission_reversal')), 0)::int as commission,
        coalesce(-sum(platform_delta) filter (where type = 'goodwill_refund'), 0)::int as goodwill,
@@ -510,7 +558,7 @@ export async function summary(from, to, storeId = null) {
        coalesce(sum(store_delta) filter (where type = 'adjustment'), 0)::int as adjustments,
        coalesce(sum(vat), 0)::int as vat,
        coalesce(sum(platform_delta), 0)::int as platform_total,
-       coalesce(sum(store_delta) filter (where type <> 'payout'), 0)::int as store_net,
+       coalesce(sum(store_delta) filter (where type not in ('payout','fee_payment')), 0)::int as store_net,
        coalesce(-sum(store_delta) filter (where type = 'payout'), 0)::int as paid_out
      from ledger_entries where created_at >= $1 and created_at < $2 and ($3::text is null or store_id = $3)`,
     [from, to, storeId],
@@ -519,6 +567,7 @@ export async function summary(from, to, storeId = null) {
   const { rows: o } = await query(
     `select
        count(*) filter (where status = 'collected')::int as collected,
+       count(*) filter (where status = 'collected' and payment_method = 'cash')::int as collected_cash,
        count(*) filter (where status = 'no_show')::int as no_show,
        count(*) filter (where status = 'cancelled' and cancelled_by = 'customer')::int as cancelled_customer,
        count(*) filter (where status = 'cancelled' and cancelled_by <> 'customer')::int as cancelled_store,
@@ -543,9 +592,9 @@ export async function moneySeries(days, storeId = null) {
        select generate_series((now() at time zone $1)::date - ($2::int - 1), (now() at time zone $1)::date, interval '1 day')::date as day
      )
      select to_char(d.day, 'YYYY-MM-DD') as day,
-            coalesce(sum(l.store_delta) filter (where l.type in ('sale','cancellation')), 0)::int as sales,
+            coalesce(sum(l.store_delta) filter (where l.type in ('sale','cancellation','cash_sale')), 0)::int as sales,
             coalesce(sum(l.platform_delta - l.vat), 0)::int as revenue,
-            coalesce(sum(l.store_delta) filter (where l.type <> 'payout'), 0)::int as store_net
+            coalesce(sum(l.store_delta) filter (where l.type not in ('payout','fee_payment')), 0)::int as store_net
        from d
        left join ledger_entries l on (l.created_at at time zone $1)::date = d.day and ($3::text is null or l.store_id = $3)
       group by d.day order by d.day`,
@@ -558,12 +607,12 @@ export async function moneySeries(days, storeId = null) {
 export async function monthly(storeId, months = 12) {
   const { rows } = await query(
     `select to_char(created_at at time zone $1, 'YYYY-MM') as month,
-            coalesce(sum(store_delta) filter (where type = 'sale'), 0)::int as gross,
+            coalesce(sum(store_delta) filter (where type in ('sale','cash_sale')), 0)::int as gross,
             coalesce(-sum(store_delta) filter (where type in ('cancellation','complaint_refund')), 0)::int as refunds,
             coalesce(sum(platform_delta) filter (where type in ('commission','commission_reversal')), 0)::int as commission,
             coalesce(sum(vat), 0)::int as vat,
             coalesce(sum(platform_delta) filter (where type = 'membership_fee'), 0)::int as membership,
-            coalesce(sum(store_delta) filter (where type <> 'payout'), 0)::int as store_net,
+            coalesce(sum(store_delta) filter (where type not in ('payout','fee_payment')), 0)::int as store_net,
             coalesce(-sum(store_delta) filter (where type = 'payout'), 0)::int as paid_out
        from ledger_entries
       where ($2::text is null or store_id = $2) and created_at >= date_trunc('month', now() at time zone $1) - make_interval(months => $3 - 1)
@@ -624,4 +673,113 @@ export const TYPE_LABELS = {
   adjustment: 'Adjustment',
   membership_fee: 'Membership fee',
   payout: 'Payout to bank',
+  cash_sale: 'Cash sale',
+  cash_collected: 'Cash kept by the store',
+  fee_payment: 'Fee payment to Ngopu',
+  chargeback_hold: 'Disputed payment (held)',
+  chargeback_release: 'Dispute won (released)',
+  processor_fee: 'Card processing fee',
+}
+
+/* ------------------------------------------------------------------ */
+/* Cash at pickup                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Whether a customer may pay cash at pickup: enough collected orders, no recent no-shows, and not too many
+ * cash reservations waiting. The reason is shown in the app.
+ * @param {string} userId @param {Settings} [settings]
+ */
+export async function cashEligibility(userId, settings) {
+  const s = settings ?? (await getSettings())
+  const { rows } = await query(
+    `select count(*) filter (where status = 'collected')::int as collected,
+            count(*) filter (where status = 'no_show' and closed_at >= now() - interval '180 days')::int as no_shows,
+            count(*) filter (where status = 'reserved' and payment_method = 'cash')::int as open_cash
+       from orders where user_id = $1`,
+    [userId],
+  )
+  const r = rows[0]
+  const base = { collected: r.collected, needed: s.cashMinCollected }
+  if (!s.cashEnabled) return { ...base, eligible: false, reason: 'Cash at pickup isn’t available right now.' }
+  if (r.no_shows > s.cashMaxNoShows) return { ...base, eligible: false, reason: 'Cash isn’t available after a missed pickup. Pay by card instead.' }
+  if (r.collected < s.cashMinCollected)
+    return { ...base, eligible: false, reason: `Unlocks after ${s.cashMinCollected} collected orders (you have ${r.collected}).` }
+  if (r.open_cash >= s.cashMaxOpen) return { ...base, eligible: false, reason: 'Collect your other cash order first.' }
+  return { ...base, eligible: true, reason: null }
+}
+
+/* ------------------------------------------------------------------ */
+/* Payment requests (fees a store owes Ngopu)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Creates a payment request for every store that owes Ngopu at least the minimum and has none open
+ * (or just for one store). Stores pay by bank transfer; anything still owed is also taken from payouts.
+ * @param {string} actor @param {string | null} [storeId]
+ */
+export async function createPaymentRequests(actor, storeId = null) {
+  await settlePaymentRequests()
+  return tx(async (c) => {
+    await c.query('select pg_advisory_xact_lock(4344)')
+    const s = await getSettings(c)
+    const min = Math.round(s.feeRequestMinLek * 100)
+    const { rows } = await c.query(
+      `select l.store_id, st.name, -sum(l.store_delta)::int as owes
+         from ledger_entries l join stores st on st.id = l.store_id
+        where not l.is_demo and ($1::text is null or l.store_id = $1)
+          and not exists (select 1 from payment_requests r where r.store_id = l.store_id and r.status = 'open')
+        group by l.store_id, st.name having -sum(l.store_delta) >= $2`,
+      [storeId, storeId ? 1 : min],
+    )
+    const created = []
+    for (const r of rows) {
+      const { rows: seq } = await c.query(`select nextval('payment_request_seq')::int as n`)
+      const number = `NGP-${new Date().getFullYear()}-${String(seq[0].n).padStart(4, '0')}`
+      const id = newId('pr_')
+      await c.query(
+        `insert into payment_requests (id, number, store_id, amount, due_at, created_by) values ($1,$2,$3,$4, now() + make_interval(days => $5), $6)`,
+        [id, number, r.store_id, r.owes, s.feeRequestDueDays, actor],
+      )
+      await audit(c, actor, 'request.create', number, { storeId: r.store_id, amount: r.owes })
+      created.push({ id, number, storeId: r.store_id, name: r.name, amount: r.owes })
+    }
+    return created
+  })
+}
+
+/** Open requests whose store no longer owes anything (paid through payout deductions) are settled. */
+export async function settlePaymentRequests() {
+  await query(
+    `update payment_requests r set status = 'settled', paid_at = now(), note = coalesce(note, 'Deducted from payouts')
+      where r.status = 'open'
+        and (select coalesce(sum(l.store_delta), 0) from ledger_entries l where l.store_id = r.store_id and not l.is_demo) >= 0`,
+  )
+}
+
+/**
+ * The store paid a request by bank transfer.
+ * @param {string} id @param {number | null} amount qindarka, defaults to the request amount @param {string} reference @param {string} actor
+ */
+export async function markRequestPaid(id, amount, reference, actor) {
+  await tx(async (c) => {
+    const { rows } = await c.query('select * from payment_requests where id = $1 for update', [id])
+    const r = rows[0]
+    if (!r) throw new HttpError(404, 'Payment request not found.')
+    if (r.status !== 'open') throw new HttpError(409, 'This request is no longer open.')
+    const paid = amount ?? r.amount
+    await c.query(
+      `insert into ledger_entries (store_id, type, store_delta, eligible_at, note, created_by) values ($1,'fee_payment',$2,now(),$3,$4)`,
+      [r.store_id, paid, `${r.number} · ref ${reference}`, actor],
+    )
+    await c.query(`update payment_requests set status = 'paid', paid_at = now(), reference = $2 where id = $1`, [id, reference])
+    await audit(c, actor, 'request.paid', r.number, { amount: paid, reference })
+  })
+}
+
+/** @param {string} id @param {string} actor */
+export async function cancelPaymentRequest(id, actor) {
+  const { rows } = await query(`update payment_requests set status = 'cancelled' where id = $1 and status = 'open' returning number`, [id])
+  if (!rows[0]) throw new HttpError(409, 'Only open requests can be cancelled.')
+  await query('insert into audit_log (actor_id, action, target) values ($1,$2,$3)', [actor, 'request.cancel', rows[0].number])
 }

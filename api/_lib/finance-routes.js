@@ -5,6 +5,10 @@ import { HttpError, query } from './db.js'
 import {
   addAdjustment,
   balances,
+  cancelPaymentRequest,
+  createPaymentRequests,
+  markRequestPaid,
+  settlePaymentRequests,
   buildPayoutRun,
   COMPLAINT_REASONS,
   getSettings,
@@ -28,6 +32,7 @@ import {
   updateSettings,
   updateTerms,
 } from './finance.js'
+import { expirePendingPayments, handleWebhook, processRefunds, reconcile } from './payments/service.js'
 import { iban, int, lekToQ, nipt, num, oneOf, optStr, str } from './validate.js'
 
 /**
@@ -61,6 +66,7 @@ function billingView(b) {
       ? { legalName: b.pending_legal_name, nipt: b.pending_nipt, iban: b.pending_iban, submittedAt: b.pending_submitted_at }
       : null,
     payoutsPaused: !!b?.payouts_paused,
+    acceptsCash: !!b?.accepts_cash,
     membershipPaidUntil: b?.membership_paid_until ?? null,
   }
 }
@@ -158,7 +164,8 @@ async function partnerEarnings({ req }) {
   await settleNoShows()
   const s = await getSettings()
   const range = lastDays(30)
-  const [terms, bal, sum30, series, months, payouts, complaints, billing] = await Promise.all([
+  await settlePaymentRequests()
+  const [terms, bal, sum30, series, months, payouts, complaints, billing, requests] = await Promise.all([
     storeTerms({ query }, storeId, s),
     balances(storeId),
     summary(range.from, range.to, storeId),
@@ -167,9 +174,12 @@ async function partnerEarnings({ req }) {
     query(`select * from payouts where store_id = $1 and status <> 'cancelled' order by created_at desc limit 50`, [storeId]),
     query(`${COMPLAINT_SELECT} where k.store_id = $1 order by k.created_at desc limit 50`, [storeId]),
     query('select * from store_billing where store_id = $1', [storeId]),
+    query(`select * from payment_requests where store_id = $1 and status <> 'cancelled' order by created_at desc limit 20`, [storeId]),
   ])
   return {
     body: {
+      requests: requests.rows.map(requestView),
+      ngopuBank: { legalName: s.ngopuLegalName, nipt: s.ngopuNipt, bank: s.ngopuBank, iban: s.ngopuIban },
       balance: bal[0],
       nextPayoutAt: nextPayoutDate(s),
       summary: sum30,
@@ -197,6 +207,7 @@ async function partnerCancelOrder({ req, params, body }) {
   const user = await requireUser(req, 'partner')
   const reason = str(body.reason, 'Reason', { max: 300 })
   await storeCancelOrder(storeOf(user), params.id, reason, user.id)
+  await processRefunds()
   return { body: { ok: true } }
 }
 
@@ -266,7 +277,11 @@ async function adminFinance({ req, url }) {
              (select count(*)::int from store_billing where pending_iban is not null) as pending_bank,
              (select count(*)::int from payouts where status = 'draft') as draft_payouts,
              (select count(*)::int from payouts where status = 'approved') as approved_payouts,
-             (select count(*)::int from store_billing b join stores s on s.id = b.store_id where s.status = 'active' and b.iban is null) as missing_bank`),
+             (select count(*)::int from store_billing b join stores s on s.id = b.store_id where s.status = 'active' and b.iban is null) as missing_bank,
+             (select count(*)::int from refunds where status = 'failed') as failed_refunds,
+             (select count(*)::int from disputes where status = 'open') as open_disputes,
+             (select count(*)::int from payment_requests where status = 'open') as open_requests,
+             (select count(*)::int from payment_requests where status = 'open' and due_at < now()) as overdue_requests`),
     getSettings(),
   ])
   const totals = bal.reduce(
@@ -377,6 +392,7 @@ async function adminResolveComplaint({ req, params, body }) {
       fundedBy: oneOf(body.fundedBy ?? 'store', 'Who pays', /** @type {const} */ (['store', 'ngopu'])),
       note,
     })
+    await processRefunds()
   }
   return { body: { ok: true } }
 }
@@ -423,6 +439,7 @@ async function adminUpdateTerms({ req, params, body }) {
     u.membership_paid_until = d
   }
   if (body.payoutsPaused !== undefined) u.payouts_paused = !!body.payoutsPaused
+  if (body.acceptsCash !== undefined) u.accepts_cash = !!body.acceptsCash
   await updateTerms(params.id, u, user.id)
   return { body: { ok: true } }
 }
@@ -485,6 +502,16 @@ async function adminPatchSettings({ req, body }) {
   if (body.noShowGraceMinutes !== undefined) p.noShowGraceMinutes = int(body.noShowGraceMinutes, 'No-show grace', 0, 24 * 60)
   if (body.payoutEveryDays !== undefined) p.payoutEveryDays = int(body.payoutEveryDays, 'Payout frequency', 1, 62)
   if (body.bankChangeHoldHours !== undefined) p.bankChangeHoldHours = int(body.bankChangeHoldHours, 'Bank change hold', 0, 720)
+  if (body.cashEnabled !== undefined) p.cashEnabled = !!body.cashEnabled
+  if (body.cashMinCollected !== undefined) p.cashMinCollected = int(body.cashMinCollected, 'Collected orders for cash', 0, 100)
+  if (body.cashMaxNoShows !== undefined) p.cashMaxNoShows = int(body.cashMaxNoShows, 'No-shows allowed', 0, 20)
+  if (body.cashMaxOpen !== undefined) p.cashMaxOpen = int(body.cashMaxOpen, 'Open cash orders', 1, 10)
+  if (body.feeRequestMinLek !== undefined) p.feeRequestMinLek = num(body.feeRequestMinLek, 'Minimum request', 0, 1_000_000)
+  if (body.feeRequestDueDays !== undefined) p.feeRequestDueDays = int(body.feeRequestDueDays, 'Days to pay', 1, 90)
+  if (body.ngopuLegalName !== undefined) p.ngopuLegalName = str(body.ngopuLegalName, 'Ngopu legal name', { max: 120 })
+  if (body.ngopuNipt !== undefined) p.ngopuNipt = body.ngopuNipt ? nipt(body.ngopuNipt) : ''
+  if (body.ngopuBank !== undefined) p.ngopuBank = optStr(body.ngopuBank, 'Bank', { max: 80 }) ?? ''
+  if (body.ngopuIban !== undefined) p.ngopuIban = body.ngopuIban ? iban(body.ngopuIban) : ''
   if (!Object.keys(p).length) throw new HttpError(400, 'Nothing to update.')
   return { body: { settings: await updateSettings(p, user.id) } }
 }
@@ -516,7 +543,9 @@ async function adminExport({ req, url }) {
   }
   const { rows } = await query(
     `select s.name, s.branch, b.legal_name, b.nipt,
-            coalesce(sum(l.store_delta) filter (where l.type = 'sale'), 0)::int as gross,
+            coalesce(sum(l.store_delta) filter (where l.type in ('sale','cash_sale')), 0)::int as gross,
+            coalesce(sum(l.store_delta) filter (where l.type = 'cash_sale'), 0)::int as cash_sales,
+            coalesce(sum(l.store_delta) filter (where l.type = 'fee_payment'), 0)::int as fee_payments,
             coalesce(-sum(l.store_delta) filter (where l.type = 'cancellation'), 0)::int as cancelled,
             coalesce(-sum(l.store_delta) filter (where l.type = 'complaint_refund'), 0)::int as complaint_refunds,
             coalesce(sum(l.platform_delta) filter (where l.type in ('commission','commission_reversal')), 0)::int as commission,
@@ -524,7 +553,7 @@ async function adminExport({ req, url }) {
             coalesce(sum(l.platform_delta) filter (where l.type = 'membership_fee'), 0)::int as membership,
             coalesce(sum(l.vat) filter (where l.type = 'membership_fee'), 0)::int as membership_vat,
             coalesce(sum(l.store_delta) filter (where l.type = 'adjustment'), 0)::int as adjustments,
-            coalesce(sum(l.store_delta) filter (where l.type <> 'payout'), 0)::int as store_net,
+            coalesce(sum(l.store_delta) filter (where l.type not in ('payout','fee_payment')), 0)::int as store_net,
             coalesce(-sum(l.store_delta) filter (where l.type = 'payout'), 0)::int as paid_out,
             bool_or(l.is_demo) as has_demo
        from ledger_entries l join stores s on s.id = l.store_id left join store_billing b on b.store_id = l.store_id
@@ -537,13 +566,14 @@ async function adminExport({ req, url }) {
     toCsv([
       [`Ngopu monthly store summary ${month} (Tirana time)`],
       [],
-      ['Store', 'Legal name', 'NIPT', 'Gross sales (L)', 'Cancelled (L)', 'Complaint refunds (L)', 'Commission incl. VAT (L)', 'Commission VAT (L)',
-        'Commission excl. VAT (L)', 'Membership incl. VAT (L)', 'Membership VAT (L)', 'Adjustments to store (L)', 'Store net (L)', 'Paid out (L)', 'Includes sample data'],
+      ['Store', 'Legal name', 'NIPT', 'Gross sales (L)', 'Of which cash at pickup (L)', 'Cancelled (L)', 'Complaint refunds (L)', 'Commission incl. VAT (L)', 'Commission VAT (L)',
+        'Commission excl. VAT (L)', 'Membership incl. VAT (L)', 'Membership VAT (L)', 'Adjustments to store (L)', 'Store net (L)', 'Paid out (L)', 'Fees paid by transfer (L)', 'Includes sample data'],
       ...rows.map((r) => [
         `${r.name}${r.branch ? ` (${r.branch})` : ''}`,
         r.legal_name,
         r.nipt,
         lek(r.gross),
+        lek(r.cash_sales),
         lek(r.cancelled),
         lek(r.complaint_refunds),
         lek(r.commission),
@@ -554,6 +584,7 @@ async function adminExport({ req, url }) {
         lek(r.adjustments),
         lek(r.store_net),
         lek(r.paid_out),
+        lek(r.fee_payments),
         r.has_demo ? 'yes' : '',
       ]),
     ]),
@@ -570,8 +601,223 @@ async function adminAudit({ req }) {
   return { body: { entries: rows } }
 }
 
+/* ------------------------------------------------------------------ */
+/* Payments (provider-ready), cash, payment requests                   */
+/* ------------------------------------------------------------------ */
+
+/** Webhook from the card payment provider. @type {Handler} */
+async function providerWebhook({ req, params, raw }) {
+  return { body: await handleWebhook(params.provider, req, raw ?? '') }
+}
+
+/**
+ * Daily housekeeping (Vercel Cron, see vercel.json): release unpaid holds, settle no-shows, retry refunds,
+ * settle payment requests and reconcile yesterday with the provider. Protected by CRON_SECRET.
+ * @type {Handler}
+ */
+async function dailyCron({ req }) {
+  const secret = process.env.CRON_SECRET
+  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) throw new HttpError(401, 'Unauthorized.')
+  const to = new Date()
+  const from = new Date(to.getTime() - DAY)
+  const [expired, noShows, refunds] = [await expirePendingPayments(true), await settleNoShows(true), await processRefunds()]
+  await settlePaymentRequests()
+  const recon = await reconcile(from.toISOString(), to.toISOString())
+  return { body: { expired, noShows, refunds, reconciliation: recon } }
+}
+
+/** Payments, refunds and disputes for the admin (Finance → Payments). @type {Handler} */
+async function adminPayments({ req }) {
+  await requireUser(req, 'admin')
+  await processRefunds()
+  const [payments, refunds, disputes] = await Promise.all([
+    query(
+      `select p.id, p.order_id as "orderId", p.provider, p.provider_ref as "providerRef", p.amount, p.refunded, p.fee, p.status, p.failure, p.created_at as "createdAt",
+              s.name as "storeName"
+         from payments p join orders o on o.id = p.order_id join stores s on s.id = o.store_id
+        where not o.is_demo order by p.created_at desc limit 200`,
+    ),
+    query(
+      `select r.id, r.order_id as "orderId", r.amount, r.reason, r.status, r.attempts, r.last_error as "lastError", r.created_at as "createdAt", s.name as "storeName"
+         from refunds r join orders o on o.id = r.order_id join stores s on s.id = o.store_id
+        where not o.is_demo order by (r.status = 'failed') desc, r.created_at desc limit 200`,
+    ),
+    query(
+      `select d.id, d.order_id as "orderId", d.amount, d.status, d.created_at as "createdAt", d.resolved_at as "resolvedAt", s.name as "storeName"
+         from disputes d join stores s on s.id = d.store_id order by (d.status = 'open') desc, d.created_at desc limit 100`,
+    ),
+  ])
+  return { body: { provider: process.env.PAYMENT_PROVIDER ?? 'simulated', payments: payments.rows, refunds: refunds.rows, disputes: disputes.rows } }
+}
+
+/** @type {Handler} */
+async function adminRetryRefund({ req, params }) {
+  const user = await requireUser(req, 'admin')
+  const { rowCount } = await query(`update refunds set status = 'queued', updated_at = now() where id = $1 and status = 'failed'`, [params.id])
+  if (!rowCount) throw new HttpError(409, 'Only failed refunds can be retried.')
+  await query('insert into audit_log (actor_id, action, target) values ($1,$2,$3)', [user.id, 'refund.retry', params.id])
+  await processRefunds()
+  return { body: { ok: true } }
+}
+
+/** @type {Handler} */
+async function adminReconcile({ req, body }) {
+  await requireUser(req, 'admin')
+  const days = int(body.days ?? 7, 'Days', 1, 90)
+  const to = new Date()
+  return { body: await reconcile(new Date(to.getTime() - days * DAY).toISOString(), to.toISOString()) }
+}
+
+/** The store turns cash at pickup on or off. @type {Handler} */
+async function partnerCash({ req, body }) {
+  const user = await requireUser(req, 'partner')
+  await updateTerms(storeOf(user), { accepts_cash: !!body.acceptsCash }, user.id)
+  return { body: { ok: true } }
+}
+
+/** @param {any} r */
+function requestView(r) {
+  return {
+    id: r.id,
+    number: r.number,
+    storeId: r.store_id,
+    storeName: r.store_name ?? undefined,
+    amount: r.amount,
+    status: r.status,
+    dueAt: r.due_at,
+    paidAt: r.paid_at,
+    reference: r.reference,
+    note: r.note,
+    createdAt: r.created_at,
+  }
+}
+
+/** @type {Handler} */
+async function adminRequests({ req }) {
+  await requireUser(req, 'admin')
+  await settlePaymentRequests()
+  const { rows } = await query(
+    `select r.*, s.name as store_name from payment_requests r join stores s on s.id = r.store_id order by (r.status = 'open') desc, r.created_at desc limit 300`,
+  )
+  return { body: { requests: rows.map(requestView) } }
+}
+
+/** Creates requests for every store owing at least the minimum. @type {Handler} */
+async function adminRunRequests({ req }) {
+  const user = await requireUser(req, 'admin')
+  return { status: 201, body: { created: await createPaymentRequests(user.id) } }
+}
+
+/** @type {Handler} */
+async function adminStoreRequest({ req, params }) {
+  const user = await requireUser(req, 'admin')
+  const created = await createPaymentRequests(user.id, params.id)
+  if (!created.length) throw new HttpError(409, 'This store doesn’t owe anything, or already has an open request.')
+  return { status: 201, body: { request: created[0] } }
+}
+
+/** @type {Handler} */
+async function adminRequestPaid({ req, params, body }) {
+  const user = await requireUser(req, 'admin')
+  const amount = body.amount === undefined || body.amount === null || body.amount === '' ? null : lekToQ(body.amount, 'Amount', 1, 10_000_000)
+  await markRequestPaid(params.id, amount, str(body.reference, 'Bank reference', { max: 80 }), user.id)
+  return { body: { ok: true } }
+}
+
+/** @type {Handler} */
+async function adminRequestCancel({ req, params }) {
+  const user = await requireUser(req, 'admin')
+  await cancelPaymentRequest(params.id, user.id)
+  return { body: { ok: true } }
+}
+
+/** @param {string} v */
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] ?? ch)
+
+/**
+ * Printable payment request (the store saves it as PDF from the browser). Not a fiscal invoice: Ngopu's
+ * fiscalised commission invoice comes from the accountant / e-invoice system.
+ * @param {string} id @param {string | null} storeId  restricts to one store (partner view)
+ */
+async function requestPage(id, storeId) {
+  const { rows } = await query(
+    `select r.*, s.name as store_name, s.branch, s.address, b.legal_name, b.nipt
+       from payment_requests r join stores s on s.id = r.store_id left join store_billing b on b.store_id = r.store_id
+      where r.id = $1 and ($2::text is null or r.store_id = $2)`,
+    [id, storeId],
+  )
+  const r = rows[0]
+  if (!r) throw new HttpError(404, 'Payment request not found.')
+  const s = await getSettings()
+  const { rows: lines } = await query(
+    `select type, sum(-store_delta)::int as amount from ledger_entries
+      where store_id = $1 and not is_demo and created_at <= $2 and type in ('commission','commission_reversal','membership_fee','adjustment','chargeback_hold','chargeback_release')
+      group by type having sum(store_delta) <> 0 order by type`,
+    [r.store_id, r.created_at],
+  )
+  const covered = lines.reduce((a, l) => a + l.amount, 0) - r.amount
+  const d = (/** @type {any} */ v) => new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const L = (/** @type {number} */ q) => `${(q / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} L`
+  const bank = s.ngopuIban
+    ? `<p><b>${esc(s.ngopuLegalName)}</b>${s.ngopuNipt ? ` · NIPT ${esc(s.ngopuNipt)}` : ''}<br>${esc(s.ngopuBank)}<br>IBAN <b>${esc(s.ngopuIban.replace(/(.{4})/g, '$1 ').trim())}</b></p>`
+    : `<p class="warn">Ngopu’s bank account will be added here. Contact us before paying.</p>`
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(r.number)} · Ngopu payment request</title>
+<style>
+  body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#10302d;background:#f4f2ec;margin:0;padding:24px}
+  main{max-width:720px;margin:0 auto;background:#fff;border-radius:16px;padding:40px}
+  h1{font-size:26px;margin:0 0 4px} .muted{color:#5b6765} .brand{color:#00615f;font-weight:800;font-size:22px}
+  table{width:100%;border-collapse:collapse;margin:24px 0} td,th{padding:10px 0;border-bottom:1px solid #e6e3dc;text-align:left}
+  td:last-child,th:last-child{text-align:right} .total td{font-weight:700;font-size:18px;border-bottom:0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px} .box{background:#f4f2ec;border-radius:12px;padding:16px}
+  .warn{color:#7a5400} .status{display:inline-block;padding:2px 10px;border-radius:99px;background:#e1f3ec;color:#0b6b4f;font-weight:600;font-size:13px}
+  @media print{body{background:#fff;padding:0} main{border-radius:0;padding:0} .noprint{display:none}}
+</style></head><body><main>
+<p class="brand">ngopu.</p>
+<h1>Payment request ${esc(r.number)}</h1>
+<p class="muted">Issued ${d(r.created_at)} · due ${d(r.due_at)}${r.status !== 'open' ? ` · <span class="status">${r.status === 'paid' ? 'Paid' : r.status === 'settled' ? 'Settled from payouts' : 'Cancelled'}</span>` : ''}</p>
+<div class="grid"><div><p class="muted">For</p><p><b>${esc(r.legal_name ?? r.store_name)}</b>${r.nipt ? `<br>NIPT ${esc(r.nipt)}` : ''}<br>${esc(r.store_name)}${r.branch ? ` – ${esc(r.branch)}` : ''}<br>${esc(r.address)}</p></div>
+<div><p class="muted">From</p><p><b>${esc(s.ngopuLegalName)}</b>${s.ngopuNipt ? `<br>NIPT ${esc(s.ngopuNipt)}` : ''}<br>Tirana, Albania</p></div></div>
+<p>These are Ngopu fees your store owes, mostly commission on orders customers paid in cash at pickup, which Ngopu didn’t collect. Card sales are settled automatically in your payouts.</p>
+<table><thead><tr><th>Fees owed to Ngopu (all time, up to ${d(r.created_at)})</th><th>Amount</th></tr></thead><tbody>
+${lines.map((l) => `<tr><td>${esc(TYPE_LABELS[/** @type {keyof typeof TYPE_LABELS} */ (l.type)] ?? l.type)}</td><td>${L(l.amount)}</td></tr>`).join('')}
+${covered > 0 ? `<tr><td class="muted">Already covered by your card sales</td><td class="muted">−${L(covered)}</td></tr>` : ''}
+<tr class="total"><td>Amount to pay</td><td>${L(r.amount)}</td></tr></tbody></table>
+<div class="box"><p style="margin-top:0"><b>Pay by bank transfer</b> with the reference <b>${esc(r.number)}</b> by ${d(r.due_at)}.</p>${bank}
+<p class="muted" style="margin-bottom:0">If you don’t pay, the amount is taken from your next Ngopu payouts instead.</p></div>
+<p class="muted" style="font-size:13px;margin-top:24px">This is a payment request, not a tax invoice. Ngopu’s fiscal invoice for commission is issued separately.</p>
+<p class="noprint"><button onclick="print()">Print or save as PDF</button></p>
+</main></body></html>`
+  return { text: html, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+}
+
+/** @type {Handler} */
+async function partnerRequestPage({ req, params }) {
+  const user = await requireUser(req, 'partner')
+  return requestPage(params.id, storeOf(user))
+}
+
+/** @type {Handler} */
+async function adminRequestPage({ req, params }) {
+  await requireUser(req, 'admin')
+  return requestPage(params.id, null)
+}
+
 /** @type {[string, string, Handler][]} */
 export const FINANCE_ROUTES = [
+  ['POST', 'payments/webhook/:provider', providerWebhook],
+  ['GET', 'cron/daily', dailyCron],
+  ['GET', 'admin/finance/payments', adminPayments],
+  ['POST', 'admin/finance/refunds/:id/retry', adminRetryRefund],
+  ['POST', 'admin/finance/reconcile', adminReconcile],
+  ['PATCH', 'partner/cash', partnerCash],
+  ['GET', 'partner/payment-requests/:id', partnerRequestPage],
+  ['GET', 'admin/finance/requests', adminRequests],
+  ['POST', 'admin/finance/requests/run', adminRunRequests],
+  ['POST', 'admin/finance/requests/:id/paid', adminRequestPaid],
+  ['POST', 'admin/finance/requests/:id/cancel', adminRequestCancel],
+  ['GET', 'admin/finance/requests/:id', adminRequestPage],
+  ['POST', 'admin/stores/:id/payment-request', adminStoreRequest],
   ['GET', 'partner/earnings', partnerEarnings],
   ['PATCH', 'partner/billing', partnerSubmitBilling],
   ['POST', 'partner/orders/:id/cancel', partnerCancelOrder],
