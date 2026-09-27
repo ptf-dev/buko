@@ -29,7 +29,7 @@ Rescue delicious unsold food from local stores at a third of the price. Ngopu is
   - edit their Surprise Bag (price, pickup window, diet, allergens) with a live preview,
   - see reservations as they arrive and check customers' pickup codes,
   - edit their store profile and map location.
-- **Admins** (a small team, all with equal access) see platform KPIs and a daily chart. They approve, reject, suspend or reactivate stores, edit any store's listing or profile, browse all orders, and manage the admin team. They can also load or remove labelled sample orders to try the dashboard before launch.
+- **Admins** (a small team, all with equal access) see platform KPIs and a daily chart. They approve, reject, suspend or reactivate stores, edit any store's listing or profile, browse all orders, and manage the admin team. They can also create a login for a store (e.g. the seeded demo stores, or a store signed up by phone) and reset a store's password. They can also load or remove labelled sample orders to try the dashboard before launch.
 - The first admin account is created at `/dashboard/setup`, which only works while no admin exists.
 
 ## Backend

@@ -435,28 +435,13 @@ export function AdminPartnerDetail() {
                 <Empty icon={<ClipboardList className="h-6 w-6" />} title="No sales in the last 14 days" text="Sales show up here day by day." />
               )}
             </Panel>
-            <Panel title="Logins">
-              {users.length === 0 ? (
-                <p className="text-sm text-muted">No partner login linked to this store (a seeded demo store).</p>
-              ) : (
-                <ul className="space-y-3 text-sm">
-                  {users.map((u) => (
-                    <li key={u.id}>
-                      <p className="font-semibold">{u.name}</p>
-                      <p className="flex items-center gap-1.5 text-muted">
-                        <Mail className="h-3.5 w-3.5" /> {u.email}
-                      </p>
-                      <p className="text-muted">Last login: {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'never'}</p>
-                    </li>
-                  ))}
-                  {store.contactPhone && (
-                    <li className="flex items-center gap-1.5 text-muted">
-                      <Phone className="h-3.5 w-3.5" /> {store.contactPhone}
-                    </li>
-                  )}
-                </ul>
-              )}
-            </Panel>
+            <StoreLogins
+              storeId={store.id}
+              users={users}
+              phone={store.contactPhone}
+              defaultName={store.contactName ?? ''}
+              onCreated={(u) => setData({ ...data, users: [...users, u] })}
+            />
           </div>
           <Panel className="mt-5" title="Recent orders">
             <DataTable
@@ -471,6 +456,176 @@ export function AdminPartnerDetail() {
       {tab === 'listing' && <BagEditor store={store} save={(bag) => patch({ bag })} onSaved={(s) => setData({ ...data, store: s })} />}
       {tab === 'profile' && <StoreProfileForm store={store} save={patch} onSaved={(s) => setData({ ...data, store: s })} />}
     </>
+  )
+}
+
+/** A readable temporary password the admin can share with the store (by phone or message). */
+function tempPassword() {
+  const words = ['buke', 'byrek', 'kafe', 'fruta', 'tave', 'petull', 'sallate', 'djathe']
+  const pick = () => words[crypto.getRandomValues(new Uint32Array(1))[0] % words.length]
+  return `${pick()}-${pick()}-${1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000)}`
+}
+
+type StoreUser = AdminStoreDetail['users'][number]
+
+/** Partner logins for one store: create a login (seeded or phone-onboarded stores) and reset passwords. */
+function StoreLogins({
+  storeId,
+  users,
+  phone,
+  defaultName,
+  onCreated,
+}: {
+  storeId: string
+  users: StoreUser[]
+  phone: string | null
+  defaultName: string
+  onCreated: (u: StoreUser) => void
+}) {
+  const toast = useToast()
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ name: defaultName, email: '', password: tempPassword() })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [resetFor, setResetFor] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [shared, setShared] = useState<{ email: string; password: string } | null>(null)
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const { user } = await api<{ user: StoreUser }>(`admin/stores/${storeId}/users`, { method: 'POST', json: form })
+      onCreated(user)
+      setShared({ email: form.email, password: form.password })
+      setAdding(false)
+      toast('Login created')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the login.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const reset = async (u: StoreUser) => {
+    setBusy(true)
+    try {
+      await api(`admin/users/${u.id}/password`, { method: 'POST', json: { password: newPassword } })
+      setShared({ email: u.email, password: newPassword })
+      setResetFor(null)
+      toast(`New password set for ${u.name}`)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not reset the password.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Panel
+      title="Logins"
+      action={
+        !adding && (
+          <Btn variant="ghost" size="sm" onClick={() => setAdding(true)}>
+            <UserPlus className="h-4 w-4" /> Create login
+          </Btn>
+        )
+      }
+    >
+      {shared && (
+        <div role="status" className="mb-4 rounded-xl bg-[#e1f3ec] p-3.5 text-sm text-[#0b4d3a]">
+          <p className="font-semibold">Share these details with the store</p>
+          <p className="mt-1">
+            Log in at <span className="font-medium">{window.location.origin}/dashboard</span>
+          </p>
+          <p>
+            Email: <span className="font-medium">{shared.email}</span>
+          </p>
+          <p>
+            Password: <span className="font-mono font-semibold">{shared.password}</span>
+          </p>
+          <p className="mt-1 text-xs">This password isn’t shown again. It works right away.</p>
+        </div>
+      )}
+
+      {adding && (
+        <form onSubmit={create} className="mb-4 space-y-3 rounded-xl bg-cream p-4" noValidate>
+          {error && (
+            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+              {error}
+            </p>
+          )}
+          <Field label="Contact name">{(id) => <Input id={id} value={form.name} onChange={set('name')} />}</Field>
+          <Field label="Email they’ll log in with">{(id) => <Input id={id} type="email" value={form.email} onChange={set('email')} />}</Field>
+          <Field label="Temporary password" hint="Share it with the store by phone or message.">
+            {(id, hint) => (
+              <div className="flex gap-2">
+                <Input id={id} aria-describedby={hint} value={form.password} onChange={set('password')} className="font-mono" />
+                <Btn variant="secondary" onClick={() => setForm({ ...form, password: tempPassword() })}>
+                  New
+                </Btn>
+              </div>
+            )}
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Btn variant="ghost" size="sm" onClick={() => setAdding(false)} disabled={busy}>
+              Cancel
+            </Btn>
+            <Btn type="submit" size="sm" loading={busy} disabled={!form.name || !form.email || form.password.length < 8}>
+              Create login
+            </Btn>
+          </div>
+        </form>
+      )}
+
+      {users.length === 0 && !adding ? (
+        <p className="text-sm text-muted">No login yet, so this store can’t use the dashboard. Create one and share it with the store.</p>
+      ) : (
+        <ul className="space-y-4 text-sm">
+          {users.map((u) => (
+            <li key={u.id}>
+              <p className="font-semibold">{u.name}</p>
+              <p className="flex items-center gap-1.5 break-all text-muted">
+                <Mail className="h-3.5 w-3.5 shrink-0" /> {u.email}
+              </p>
+              <p className="text-muted">
+                Last login: {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'never'}
+              </p>
+              {resetFor === u.id ? (
+                <div className="mt-2 flex gap-2">
+                  <Input aria-label="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="font-mono" />
+                  <Btn size="sm" className="h-11" loading={busy} disabled={newPassword.length < 8} onClick={() => reset(u)}>
+                    Save
+                  </Btn>
+                  <Btn variant="ghost" size="sm" className="h-11" onClick={() => setResetFor(null)} disabled={busy}>
+                    Cancel
+                  </Btn>
+                </div>
+              ) : (
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 -ml-3"
+                  onClick={() => {
+                    setNewPassword(tempPassword())
+                    setResetFor(u.id)
+                  }}
+                >
+                  Reset password
+                </Btn>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {phone && (
+        <p className="mt-4 flex items-center gap-1.5 text-sm text-muted">
+          <Phone className="h-3.5 w-3.5" /> {phone}
+        </p>
+      )}
+    </Panel>
   )
 }
 

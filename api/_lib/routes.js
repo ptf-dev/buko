@@ -681,6 +681,50 @@ async function adminRemoveTeam({ req, params }) {
   return { body: { ok: true } }
 }
 
+/**
+ * Gives a store a partner login (e.g. a seeded demo store, or a store onboarded by phone).
+ * The admin sets a temporary password and shares it with the store.
+ */
+/** @type {Handler} */
+async function adminCreateStoreLogin({ req, params, body }) {
+  await requireUser(req, 'admin')
+  const name = str(body.name, 'Name', { max: 80 })
+  const mail = email(body.email)
+  const hash = await hashPassword(password(body.password))
+  const id = newId('u_')
+  await tx(async (c) => {
+    const store = await c.query('select 1 from stores where id = $1', [params.id])
+    if (!store.rows[0]) throw new HttpError(404, 'Store not found.')
+    const exists = await c.query('select 1 from users where email = $1', [mail])
+    if (exists.rows[0]) throw new HttpError(409, 'An account with this email already exists.')
+    await c.query(`insert into users (id, email, name, password_hash, role, store_id) values ($1,$2,$3,$4,'partner',$5)`, [
+      id,
+      mail,
+      name,
+      hash,
+      params.id,
+    ])
+    // Fill in the store's contact details if it had none (seeded stores).
+    await c.query('update stores set contact_name = coalesce(contact_name, $2), contact_email = coalesce(contact_email, $3) where id = $1', [
+      params.id,
+      name,
+      mail,
+    ])
+  })
+  return { status: 201, body: { user: { id, name, email: mail, lastLoginAt: null } } }
+}
+
+/** Sets a new password for a partner login and signs it out everywhere. */
+/** @type {Handler} */
+async function adminResetPassword({ req, params, body }) {
+  await requireUser(req, 'admin')
+  const hash = await hashPassword(password(body.password))
+  const { rowCount } = await query(`update users set password_hash = $2 where id = $1 and role = 'partner'`, [params.id, hash])
+  if (!rowCount) throw new HttpError(404, 'Partner login not found.')
+  await query('delete from sessions where user_id = $1', [params.id])
+  return { body: { ok: true } }
+}
+
 /** Sample orders over the last 30 days so a fresh install has something to look at. Marked is_demo and removable. */
 /** @type {Handler} */
 async function adminDemo({ req, body }) {
@@ -762,6 +806,8 @@ const ROUTES = [
   ['GET', 'admin/team', adminTeam],
   ['POST', 'admin/team', adminAddTeam],
   ['DELETE', 'admin/team/:id', adminRemoveTeam],
+  ['POST', 'admin/stores/:id/users', adminCreateStoreLogin],
+  ['POST', 'admin/users/:id/password', adminResetPassword],
   ['POST', 'admin/demo', adminDemo],
 ]
 
