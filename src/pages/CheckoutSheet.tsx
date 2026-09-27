@@ -69,7 +69,6 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
   const cashAllowed = cashOffered && !!cash?.eligible
   const [method, setMethod] = useState<PaymentMethod>(savedMethod === 'cash' ? 'card' : savedMethod)
   const payingCash = method === 'cash' && cashAllowed
-  const [agreed, setAgreed] = useState(false)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
   const max = Math.min(store.bag.quantity, MAX_PER_ORDER)
@@ -103,7 +102,7 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
               {error}
             </p>
           )}
-          <Button className="w-full" disabled={!agreed || paying || max <= 0} onClick={pay}>
+          <Button className="w-full" disabled={paying || max <= 0} onClick={pay}>
             {paying ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" /> Processing…
@@ -201,18 +200,6 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
         </div>
       </div>
 
-      <label className="mt-5 flex gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={agreed}
-          onChange={(e) => setAgreed(e.target.checked)}
-          className="mt-0.5 h-5 w-5 shrink-0 accent-[#00615f]"
-        />
-        <span className="text-muted">
-          I understand the contents are a surprise and may contain allergens, and that I must collect my order in the pickup window. You can
-          cancel up to 2 hours before pickup for a full refund.
-        </span>
-      </label>
     </Sheet>
   )
 }
