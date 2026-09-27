@@ -154,14 +154,16 @@ let schemaReady = null
 export function ensureSchema() {
   if (!schemaReady) {
     schemaReady = (async () => {
+      if (await schemaIsCurrent()) return
       const client = await getPool().connect()
       try {
         // One transaction with a transaction-scoped lock: safe behind Neon's pooler, released even if we crash,
         // and the timeouts stop a cold start from hanging on a lock until the function is killed.
         await client.query('begin')
-        await client.query(`set local lock_timeout = '5s'`)
-        await client.query(`set local statement_timeout = '20s'`)
+        await client.query(`set local statement_timeout = '25s'`)
         await client.query('select pg_advisory_xact_lock(4242)')
+        // Only the DDL below gets a short lock wait, not the queue for the setup lock above.
+        await client.query(`set local lock_timeout = '5s'`)
         await client.query(SCHEMA)
         const { rows } = await client.query('select count(*)::int as n from stores')
         if (rows[0].n === 0) await seedStores(client)
@@ -197,6 +199,23 @@ export function ensureSchema() {
     })
   }
   return schemaReady
+}
+
+/**
+ * True when every table, index and migration already exists and stores are seeded. This is the
+ * normal case, and it takes no locks, so cold starts on a set-up database never queue behind each other.
+ */
+async function schemaIsCurrent() {
+  const objects = ['stores', 'bags', 'users', 'sessions', 'orders', 'orders_store_idx', 'orders_device_idx', 'sessions_user_idx', 'orders_user_idx']
+  const { rows } = await getPool().query(
+    `select bool_and(to_regclass('public.' || name) is not null) as tables,
+       coalesce((select pg_get_constraintdef(oid) like '%customer%' from pg_constraint where conname = 'users_role_check'), false) as roles
+     from unnest($1::text[]) as name`,
+    [objects],
+  )
+  if (!rows[0].tables || !rows[0].roles) return false
+  const { rows: s } = await getPool().query('select exists (select 1 from stores) as seeded')
+  return s[0].seeded
 }
 
 /** @param {pg.PoolClient} client */
