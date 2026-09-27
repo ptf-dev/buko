@@ -28,6 +28,15 @@ export const LANDING_URL = 'https://buko-five.vercel.app'
 /** Partner & admin dashboard (web only). */
 export const DASHBOARD_URL = `${LANDING_URL}/dashboard`
 
+/** Privacy policy (web page, also linked from the app stores). */
+export const PRIVACY_URL = `${LANDING_URL}/privacy`
+
+/** Public contact for privacy and data requests (shown in the privacy policy). */
+export const CONTACT_EMAIL = 'info@propfirmstech.com'
+
+/** Legal entity named in the privacy policy. Replace with the registered company name and address once it exists. */
+export const LEGAL_ENTITY = 'Ngopu'
+
 /** App store listings. Leave empty until the apps are live; the landing page then shows "Coming soon". */
 export const APP_STORE_URL: string = ''
 export const PLAY_STORE_URL: string = ''

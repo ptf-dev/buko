@@ -238,6 +238,13 @@ export function Apply() {
             {(id, hint) => <TextArea id={id} aria-describedby={hint} value={form.note} onChange={set('note')} />}
           </Field>
 
+          <p className="text-[13px] text-muted">
+            By applying you agree that we store your contact and store details to review your application, as described in our{' '}
+            <a href="/privacy?lang=en" className="font-medium text-brand hover:underline">
+              privacy policy
+            </a>
+            .
+          </p>
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted">
               Already a partner?{' '}
