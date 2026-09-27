@@ -21,7 +21,7 @@ const sq = {
   },
   cta: {
     main: 'Fillo të shpëtosh ushqim',
-    note: 'Falas · Punon në shfletues, pa shkarkuar asgjë',
+    note: 'Falas · Punon në browser, pa shkarkuar asgjë',
     playTop: 'Merre në',
     apkTop: 'Shkarko versionin beta',
     apkBottom: 'Aplikacioni Android',
@@ -118,7 +118,7 @@ const sq = {
       },
       {
         q: 'Ka aplikacion për iPhone dhe Android?',
-        a: 'Ngopu punon që tani në çdo shfletues. Versioni beta për Android shkarkohet nga kjo faqe, ndërsa aplikacioni për iPhone vjen së shpejti në App Store.',
+        a: 'Ngopu punon që tani në çdo browser. Versioni beta për Android shkarkohet nga kjo faqe, ndërsa aplikacioni për iPhone vjen së shpejti në App Store.',
       },
     ],
   },
@@ -180,8 +180,8 @@ const en: Copy = {
     iosHint: ['On iPhone? Open the web app, tap ', 'Share', ' → ', 'Add to Home Screen', ' and Ngopu works just like an app.'],
   },
   hero: {
-    line1: 'Eat your fill.',
-    line2: 'Up to 70% off',
+    line1: 'Good food.',
+    line2: 'Rescued',
     sub: ['Surprise Bags of delicious unsold food from the best bakeries, restaurants and shops near you, at a ', 'third of the price', '. Launching soon in Tirana.'],
     chipPrice: '350 L instead of 1,050 L',
     chipCo2: '2.7 kg CO₂e saved',
