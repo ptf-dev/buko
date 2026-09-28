@@ -1,3 +1,4 @@
+import { DEMO_MODE } from '../config'
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState, type Dispatch, type ReactNode } from 'react'
 import { ApiError, customerApi, customerToken, type CustomerAccount } from '../lib/api'
 import type { Order, PaymentMethod } from '../types'
@@ -21,12 +22,16 @@ function load(): AppState {
 const StateContext = createContext<AppState | null>(null)
 const DispatchContext = createContext<Dispatch<Action> | null>(null)
 
+const OFFLINE = 'You’re offline. Connect to the internet and try again.'
+
 interface Sync {
-  /** True once the server answered: stock and orders are live and shared. False = offline demo data. */
+  /** True once the server answered: stock and orders are live and shared. */
   live: boolean
+  /** True after the first attempt to reach the server finished (either way). */
+  checked: boolean
   refresh: () => Promise<void>
 }
-const SyncContext = createContext<Sync>({ live: false, refresh: async () => {} })
+const SyncContext = createContext<Sync>({ live: false, checked: false, refresh: async () => {} })
 
 interface Account {
   /** Signed-in customer, or null for a guest. */
@@ -47,6 +52,7 @@ const REFRESH_MS = 60_000
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, load)
   const [live, setLive] = useState(false)
+  const [checked, setChecked] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -56,8 +62,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'upsertOrders', orders })
       setLive(true)
     } catch {
-      // No backend reachable (local dev or database not connected): keep the built-in demo data.
+      // No backend reachable: keep the last data we had (demo data in development). Actions refuse in production.
       setLive(false)
+    } finally {
+      setChecked(true)
     }
   }, [])
 
@@ -73,7 +81,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
-  const sync = useMemo(() => ({ live, refresh }), [live, refresh])
+  const sync = useMemo(() => ({ live, checked, refresh }), [live, checked, refresh])
 
   const [account, setAccount] = useState<CustomerAccount | null>(null)
   const [ready, setReady] = useState(() => !customerToken.get())
@@ -197,6 +205,7 @@ export function useOrderActions() {
     return {
       async reserve(storeId: string, quantity: number, paymentMethod: PaymentMethod): Promise<string> {
         if (!live) {
+          if (!DEMO_MODE) throw new Error(OFFLINE)
           const orderId = randomId()
           dispatch({ type: 'reserve', storeId, quantity, paymentMethod, now: Date.now(), orderId, pickupCode: randomPickupCode() })
           return orderId
@@ -210,12 +219,18 @@ export function useOrderActions() {
         }
       },
       async cancel(orderId: string) {
-        if (!live) return dispatch({ type: 'cancelOrder', orderId })
+        if (!live) {
+          if (!DEMO_MODE) throw new Error(OFFLINE)
+          return dispatch({ type: 'cancelOrder', orderId })
+        }
         save(await customerApi.cancel(orderId))
         refresh()
       },
       async collect(orderId: string) {
-        if (!live) return dispatch({ type: 'collectOrder', orderId, now: Date.now() })
+        if (!live) {
+          if (!DEMO_MODE) throw new Error(OFFLINE)
+          return dispatch({ type: 'collectOrder', orderId, now: Date.now() })
+        }
         save(await customerApi.collect(orderId))
       },
       /** Report a problem with a collected bag. Needs the server: support decides refunds. */
@@ -224,7 +239,10 @@ export function useOrderActions() {
         save(await customerApi.complain(orderId, reason, details))
       },
       async rate(orderId: string, rating: number, tags: string[]) {
-        if (!live) return dispatch({ type: 'rateOrder', orderId, rating, tags })
+        if (!live) {
+          if (!DEMO_MODE) throw new Error(OFFLINE)
+          return dispatch({ type: 'rateOrder', orderId, rating, tags })
+        }
         save(await customerApi.rate(orderId, rating, tags))
       },
     }

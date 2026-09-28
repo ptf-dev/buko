@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { WifiOff } from 'lucide-react'
 import { BottomNav } from './components/BottomNav'
 import { Browse } from './pages/Browse'
 import { Discover } from './pages/Discover'
@@ -9,9 +10,9 @@ import { OrderDetail } from './pages/OrderDetail'
 import { Orders } from './pages/Orders'
 import { Profile } from './pages/Profile'
 import { StoreDetail } from './pages/StoreDetail'
-import { DASHBOARD_URL } from './config'
+import { DASHBOARD_URL, DEMO_MODE } from './config'
 import { ROUTER_BASENAME } from './lib/native'
-import { AppProvider, useAppState } from './state/store'
+import { AppProvider, useAppState, useSync } from './state/store'
 
 /** Old in-app partner page: the partner dashboard is now a separate site section. */
 function ToDashboard() {
@@ -38,6 +39,7 @@ function Shell() {
 
   return (
     <div className="mx-auto flex h-dvh max-w-md flex-col bg-white shadow-xl">
+      <OfflineBanner />
       <main ref={mainRef} className="relative min-h-0 flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Discover />} />
@@ -53,6 +55,31 @@ function Shell() {
         </Routes>
       </main>
       {showNav && <BottomNav />}
+    </div>
+  )
+}
+
+/** Shown in production when the server can't be reached: results are the last ones saved, and reserving waits. */
+function OfflineBanner() {
+  const { live, checked, refresh } = useSync()
+  const [busy, setBusy] = useState(false)
+  if (DEMO_MODE || live || !checked) return null
+  return (
+    <div role="status" className="flex items-center gap-3 bg-ink px-4 pt-[calc(env(safe-area-inset-top)+8px)] pb-2 text-sm text-white">
+      <WifiOff className="h-4 w-4 shrink-0" aria-hidden />
+      <p className="min-w-0 flex-1">You’re offline. Showing saved results; reserving needs a connection.</p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          await refresh()
+          setBusy(false)
+        }}
+        className="shrink-0 font-semibold text-sun underline underline-offset-2"
+      >
+        {busy ? 'Trying…' : 'Retry'}
+      </button>
     </div>
   )
 }

@@ -60,3 +60,9 @@ export const MAP_TILES = {
 export const SERVICE_AREA_KM = 30
 
 export const RADIUS_OPTIONS_KM = [1, 2, 5, 10, 20]
+
+/**
+ * Offline demo mode (fake local reservations with the built-in stores) is for development only. In production
+ * an unreachable server must never produce an order the store doesn't know about.
+ */
+export const DEMO_MODE = import.meta.env.DEV || import.meta.env.VITE_DEMO === '1'
