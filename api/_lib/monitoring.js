@@ -7,6 +7,7 @@
 import { createHash } from 'node:crypto'
 import { requireUser } from './auth.js'
 import { HttpError, query } from './db.js'
+import { mailConfigured, testEmail } from './mail.js'
 
 /** Events the apps may send; anything else is dropped. */
 export const EVENTS = [
@@ -109,7 +110,22 @@ export async function adminMonitoring({ req, url }) {
       [days],
     ),
   ])
-  return { body: { days, errors: errors.rows, daily: daily.rows, funnel: funnel.rows, platforms: platforms.rows, pages: pages.rows, email: email.rows } }
+  const failures = await query(
+    `select kind, to_email as "to", error, created_at as "at" from email_log where status = 'failed' order by created_at desc limit 5`,
+  )
+  return {
+    body: {
+      days,
+      errors: errors.rows,
+      daily: daily.rows,
+      funnel: funnel.rows,
+      platforms: platforms.rows,
+      pages: pages.rows,
+      email: email.rows,
+      emailFailures: failures.rows,
+      emailConfigured: mailConfigured(),
+    },
+  }
 }
 
 /** @type {import('./routes.js').Handler} */
@@ -117,4 +133,11 @@ export async function adminResolveError({ req, params }) {
   await requireUser(req, 'admin')
   await query('update error_events set resolved_at = now() where fingerprint = $1', [params.id])
   return { body: { ok: true } }
+}
+
+/** Sends a sample email to the admin, to check the SMTP settings. Returns the mail server's error if it fails. @type {import('./routes.js').Handler} */
+export async function adminTestEmail({ req }) {
+  const user = await requireUser(req, 'admin')
+  const r = await testEmail({ to: user.email, name: user.name, lang: user.language === 'en' ? 'en' : 'sq' })
+  return { body: { ...r, to: user.email } }
 }

@@ -25,7 +25,7 @@ import { queueRefund } from './payments/queue.js'
 import { expirePendingPayments, failPayment, PAYMENT_HOLD_MINUTES, processRefunds, startPayment, verifyPayment } from './payments/service.js'
 import { pokConfigured, pokEnv } from './payments/providers.js'
 import { FINANCE_ROUTES } from './finance-routes.js'
-import { adminMonitoring, adminResolveError, reportError, trackEvents } from './monitoring.js'
+import { adminMonitoring, adminResolveError, adminTestEmail, reportError, trackEvents } from './monitoring.js'
 import { fcmConfigured, removeSubscription, saveSubscription, sendDueReminders, sendReceipt, webPushConfigured } from './notify.js'
 
 /**
@@ -1224,6 +1224,7 @@ const ROUTES = [
   ['POST', 'telemetry/events', trackEvents],
   ['GET', 'admin/monitoring', adminMonitoring],
   ['POST', 'admin/monitoring/errors/:id/resolve', adminResolveError],
+  ['POST', 'admin/monitoring/test-email', adminTestEmail],
   ['POST', 'push/subscribe', pushSubscribe],
   ['POST', 'push/unsubscribe', pushUnsubscribe],
   ['POST', 'orders/:id/cancel', cancelOrder],

@@ -27,6 +27,8 @@ interface MonitoringData {
   platforms: { platform: string; sessions: number }[]
   pages: { path: string; views: number }[]
   email: { kind: string; status: 'sent' | 'failed' | 'not_configured'; n: number }[]
+  emailFailures: { kind: string; to: string; error: string | null; at: string }[]
+  emailConfigured: boolean
 }
 
 const FUNNEL: { name: string; label: string }[] = [
@@ -42,6 +44,8 @@ const EMAIL_KIND: Record<string, string> = {
   reset_password: 'Password reset',
   receipt: 'Order receipt',
   store_cancelled: 'Store cancelled',
+  password_changed: 'Password changed',
+  test: 'Test email',
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
@@ -52,6 +56,19 @@ export function AdminMonitoring() {
   const { data, error, loading, reload } = useResource<MonitoringData>(`admin/monitoring?days=${days}`, 60_000)
   const toast = useToast()
   const [open, setOpen] = useState<string | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; to: string } | null>(null)
+  const sendTest = async () => {
+    setTesting(true)
+    try {
+      setTestResult(await api('admin/monitoring/test-email', { method: 'POST', json: {} }))
+      reload()
+    } catch (e) {
+      setTestResult({ ok: false, error: e instanceof Error ? e.message : 'Could not send.', to: '' })
+    } finally {
+      setTesting(false)
+    }
+  }
 
   const resolve = async (e: ErrorEvent) => {
     try {
@@ -193,7 +210,20 @@ export function AdminMonitoring() {
             </ul>
           )}
         </Panel>
-        <Panel title="Emails">
+        <Panel
+          title="Emails"
+          action={
+            <Btn size="sm" variant="secondary" loading={testing} onClick={sendTest}>
+              Send test email
+            </Btn>
+          }
+        >
+          {testResult && (
+            <p role="status" className={`mb-3 rounded-xl px-3 py-2 text-sm ${testResult.ok ? 'bg-brand-light text-brand-dark' : 'bg-red-50 text-red-800'}`}>
+              {testResult.ok ? `Sent to ${testResult.to}. Check the inbox (and spam).` : `Not sent: ${testResult.error}`}
+            </p>
+          )}
+          {!data.emailConfigured && <p className="mb-3 text-sm text-muted">Email isn’t set up yet (SMTP settings missing).</p>}
           {data.email.length === 0 ? (
             <p className="flex items-center gap-2 text-sm text-muted">
               <Mail className="h-4 w-4" aria-hidden /> No emails in this period.
@@ -212,6 +242,21 @@ export function AdminMonitoring() {
                 </li>
               ))}
             </ul>
+          )}
+          {data.emailFailures.length > 0 && (
+            <div className="mt-4 border-t border-line/70 pt-3">
+              <p className="text-sm font-semibold">Latest failures</p>
+              <ul className="mt-2 space-y-2">
+                {data.emailFailures.map((f, i) => (
+                  <li key={i} className="text-xs">
+                    <span className="text-muted">
+                      {when(f.at)} · {EMAIL_KIND[f.kind] ?? f.kind} → {f.to}
+                    </span>
+                    <span className="mt-0.5 block font-mono break-all text-red-800">{f.error}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </Panel>
       </div>

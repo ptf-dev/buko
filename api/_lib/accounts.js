@@ -5,7 +5,7 @@
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { HttpError, query, tx } from './db.js'
-import { APP_URL, lang, resetPassword, verifyEmail } from './mail.js'
+import { APP_URL, lang, passwordChanged, resetPassword, verifyEmail } from './mail.js'
 
 /** @param {string} s */
 const sha256 = (s) => createHash('sha256').update(s).digest('hex')
@@ -92,7 +92,9 @@ export async function completePasswordReset(token, hash) {
     await c.query('update users set password_hash = $2, email_verified_at = coalesce(email_verified_at, now()) where id = $1', [userId, hash])
     await c.query('delete from sessions where user_id = $1', [userId])
   })
-  const { rows } = await query('select role from users where id = $1', [userId])
+  const { rows } = await query('select role, email, name, language from users where id = $1', [userId])
+  // Tell the owner, in case it wasn't them.
+  if (rows[0]) await passwordChanged({ to: rows[0].email, name: rows[0].name, lang: lang(rows[0].language) })
   return { userId, role: /** @type {string} */ (rows[0]?.role) }
 }
 

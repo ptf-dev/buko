@@ -12,6 +12,7 @@ import { createSign } from 'node:crypto'
 import webpush from 'web-push'
 import { newId } from './auth.js'
 import { query } from './db.js'
+import { SITE } from './email-templates.js'
 import { lang, orderReceipt, storeCancelled } from './mail.js'
 import { TIMEZONE } from './time.js'
 
@@ -31,27 +32,53 @@ export async function sendReceipt(orderId) {
        from users u, stores s
       where o.id = $1 and o.receipt_sent_at is null and o.status = 'reserved' and not o.is_demo
         and u.id = o.user_id and s.id = o.store_id
-      returning o.*, u.email, u.name as user_name, u.language, s.name as store_name, s.address as store_address`,
+      returning o.id, u.email, u.name as user_name, u.language`,
     [orderId],
   )
-  const o = rows[0]
-  if (!o) return false
-  await orderReceipt({ to: o.email, name: o.user_name, lang: lang(o.language), order: o, storeName: o.store_name, storeAddress: o.store_address })
+  if (!rows[0]) return false
+  const o = await orderWithStore(orderId)
+  await orderReceipt({ to: rows[0].email, name: rows[0].user_name, lang: lang(rows[0].language), order: o, store: storeInfo(o) })
   return true
+}
+
+/** An order with what the emails show about its store: photo, category, location and bag. @param {string} orderId */
+async function orderWithStore(orderId) {
+  const { rows } = await query(
+    `select o.*, s.name as store_name, s.address as store_address, s.category, s.lat, s.lng, b.title as bag_title,
+            extract(epoch from ph.updated_at)::bigint as photo_v
+       from orders o join stores s on s.id = o.store_id left join bags b on b.store_id = o.store_id
+       left join store_photos ph on ph.store_id = o.store_id
+      where o.id = $1`,
+    [orderId],
+  )
+  return rows[0]
+}
+
+/** @param {any} o @returns {import('./email-templates.js').StoreInfo} */
+function storeInfo(o) {
+  return {
+    name: o.store_name,
+    address: o.store_address,
+    category: o.category,
+    lat: o.lat,
+    lng: o.lng,
+    bagTitle: o.bag_title ?? undefined,
+    photoUrl: o.photo_v ? `${SITE}/api/stores/${o.store_id}/photo?v=${o.photo_v}` : null,
+  }
 }
 
 /** The store cancelled: email and push. @param {string} orderId */
 export async function notifyStoreCancelled(orderId) {
   const { rows } = await query(
-    `select o.*, u.email, u.name as user_name, u.language, s.name as store_name
-       from orders o join users u on u.id = o.user_id join stores s on s.id = o.store_id where o.id = $1 and not o.is_demo`,
+    `select o.id, u.email, u.name as user_name, u.language
+       from orders o join users u on u.id = o.user_id where o.id = $1 and not o.is_demo`,
     [orderId],
   )
-  const o = rows[0]
-  if (!o) return
+  if (!rows[0]) return
+  const o = { ...(await orderWithStore(orderId)), ...rows[0] }
   const l = lang(o.language)
   await Promise.all([
-    storeCancelled({ to: o.email, name: o.user_name, lang: l, order: o, storeName: o.store_name, reason: o.cancel_reason }),
+    storeCancelled({ to: o.email, name: o.user_name, lang: l, order: o, store: storeInfo(o) }),
     pushToUser(o.user_id, {
       title: l === 'sq' ? `${o.store_name} anuloi porosinë` : `${o.store_name} cancelled your order`,
       body:
