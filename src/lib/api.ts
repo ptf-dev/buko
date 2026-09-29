@@ -94,6 +94,8 @@ export interface CustomerAccount {
   email: string
   emailVerified?: boolean
   language?: 'sq' | 'en' | null
+  /** On the TESTER_EMAILS list: may make test payments. */
+  tester?: boolean
 }
 
 /** How to take a card payment for a new order: POK's form for sdkOrderId, or a redirect. */
@@ -122,8 +124,11 @@ export interface CashEligibility {
 export const customerApi = {
   stores: () => api<{ stores: Store[] }>('stores').then((r) => r.stores),
   orders: () => customer<{ orders: Order[] }>(`orders?deviceId=${deviceId()}`).then((r) => r.orders),
-  reserve: (storeId: string, quantity: number, paymentMethod: PaymentMethod) =>
-    customer<{ order: Order; payment?: PaymentInfo | null }>('orders', { method: 'POST', json: { storeId, quantity, paymentMethod, deviceId: deviceId() } }),
+  reserve: (storeId: string, quantity: number, paymentMethod: PaymentMethod, testPayment = false) =>
+    customer<{ order: Order; payment?: PaymentInfo | null }>('orders', {
+      method: 'POST',
+      json: { storeId, quantity, paymentMethod, deviceId: deviceId(), ...(testPayment ? { testPayment: true } : {}) },
+    }),
   /** Asks the server to read the payment back from the provider and confirm the order if it's paid. */
   verifyPayment: (id: string) =>
     customer<{ order: Order; payment?: PaymentInfo | null }>(`orders/${id}/payment`, { method: 'POST', json: { deviceId: deviceId() } }),

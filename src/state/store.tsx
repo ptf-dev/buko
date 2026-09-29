@@ -95,7 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     customerApi
       .me()
       .then((user) => {
-        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified, language: user.language })
+        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified, language: user.language, tester: user.tester })
         else customerToken.set(null)
       })
       .catch((e) => {
@@ -111,6 +111,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAccount(user)
       dispatch({ type: 'updateProfile', profile: { name: user.name, email: user.email } })
       refresh()
+      // The full account (verified email, tester flag) comes from auth/me.
+      customerApi
+        .me()
+        .then((u) => u && u.role === 'customer' && setAccount({ id: u.id, name: u.name, email: u.email, emailVerified: u.emailVerified, language: u.language, tester: u.tester }))
+        .catch(() => {})
     }
     const signedOut = () => {
       customerToken.set(null)
@@ -147,7 +152,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       async reload() {
         const user = await customerApi.me().catch(() => null)
-        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified, language: user.language })
+        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified, language: user.language, tester: user.tester })
       },
     }
   }, [account, ready, refresh])
@@ -214,7 +219,7 @@ export function useOrderActions() {
     const save = (order: Order) => dispatch({ type: 'upsertOrders', orders: [order] })
     return {
       /** Places the order. For card payments with POK it comes back unpaid, with the form to show in payment. */
-      async reserve(storeId: string, quantity: number, paymentMethod: PaymentMethod): Promise<{ orderId: string; payment: PaymentInfo | null }> {
+      async reserve(storeId: string, quantity: number, paymentMethod: PaymentMethod, testPayment = false): Promise<{ orderId: string; payment: PaymentInfo | null }> {
         if (!live) {
           if (!DEMO_MODE) throw new Error(OFFLINE())
           const orderId = randomId()
@@ -222,7 +227,7 @@ export function useOrderActions() {
           return { orderId, payment: null }
         }
         try {
-          const { order, payment } = await customerApi.reserve(storeId, quantity, paymentMethod)
+          const { order, payment } = await customerApi.reserve(storeId, quantity, paymentMethod, testPayment)
           save(order)
           return { orderId: order.id, payment: order.paymentStatus === 'pending' && payment?.sdkOrderId ? payment : null }
         } finally {

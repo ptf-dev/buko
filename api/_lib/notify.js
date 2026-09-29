@@ -30,7 +30,7 @@ export async function sendReceipt(orderId) {
   const { rows } = await query(
     `update orders o set receipt_sent_at = now()
        from users u, stores s
-      where o.id = $1 and o.receipt_sent_at is null and o.status = 'reserved' and not o.is_demo
+      where o.id = $1 and o.receipt_sent_at is null and o.status = 'reserved' and (not o.is_demo or o.user_id is not null)
         and u.id = o.user_id and s.id = o.store_id
       returning o.id, u.email, u.name as user_name, u.language`,
     [orderId],
@@ -71,7 +71,7 @@ function storeInfo(o) {
 export async function notifyStoreCancelled(orderId) {
   const { rows } = await query(
     `select o.id, u.email, u.name as user_name, u.language
-       from orders o join users u on u.id = o.user_id where o.id = $1 and not o.is_demo`,
+       from orders o join users u on u.id = o.user_id where o.id = $1 and (not o.is_demo or o.user_id is not null)`,
     [orderId],
   )
   if (!rows[0]) return
@@ -113,7 +113,7 @@ export async function sendDueReminders(force = false) {
     `update orders o set reminded_at = now()
        from stores s
       where o.id in (select id from orders
-                      where status = 'reserved' and reminded_at is null and user_id is not null and not is_demo
+                      where status = 'reserved' and reminded_at is null and user_id is not null
                         and pickup_start <= now() + make_interval(mins => $1) and pickup_end > now()
                       order by pickup_start limit 100 for update skip locked)
         and s.id = o.store_id

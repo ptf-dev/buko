@@ -239,8 +239,28 @@ function pokState(o) {
   return o.status ?? (o.isCanceled ? 'canceled' : o.isCaptured ? 'captured' : o.isCompleted ? 'completed' : o.expiresAt && new Date(o.expiresAt).getTime() < Date.now() ? 'expired' : 'open')
 }
 
+/**
+ * Tester payments (TESTER_EMAILS): nothing is charged, so refunds of them succeed at once.
+ * @type {PaymentProvider}
+ */
+const test = {
+  name: 'test',
+  async createPayment(r) {
+    return { providerRef: `test_${r.paymentId}`, status: 'succeeded' }
+  },
+  async refund(r) {
+    return { providerRef: `testrf_${r.refundId}`, status: 'succeeded' }
+  },
+  async parseWebhook() {
+    throw new HttpError(404, 'Not found.')
+  },
+  async fetchSettlements() {
+    return null
+  },
+}
+
 /** @type {Record<string, PaymentProvider>} */
-const PROVIDERS = { simulated, pok }
+const PROVIDERS = { simulated, pok, test }
 
 /** @param {string} [name] @returns {PaymentProvider} */
 export function getProvider(name) {

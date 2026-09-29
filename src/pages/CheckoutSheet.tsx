@@ -1,5 +1,5 @@
 import { Banknote, CreditCard, Loader2, Minus, Plus, Wallet } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthForm } from '../components/AuthForm'
 import { Button } from '../components/Button'
@@ -98,6 +98,19 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
   const [method, setMethod] = useState<PaymentMethod>(savedMethod === 'cash' ? 'card' : savedMethod)
   const payingCash = method === 'cash' && cashAllowed
   const [paying, setPaying] = useState(false)
+  // Testers (TESTER_EMAILS on the server): 5 quick taps on the total switch to a test payment, nothing charged.
+  const { account } = useAccount()
+  const [testMode, setTestMode] = useState(false)
+  const taps = useRef<number[]>([])
+  const tapTotal = () => {
+    if (!account?.tester || !live) return
+    const t = Date.now()
+    taps.current = [...taps.current.filter((x) => t - x < 3000), t]
+    if (taps.current.length >= 5) {
+      taps.current = []
+      setTestMode((m) => !m)
+    }
+  }
   const [error, setError] = useState('')
   const max = Math.min(store.bag.quantity, MAX_PER_ORDER)
   const total = store.bag.price * quantity
@@ -108,10 +121,10 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
     try {
       // Payment is simulated; the reservation itself is real when the server is connected.
       const [{ orderId, payment }] = await Promise.all([
-        actions.reserve(store.id, quantity, payingCash || method !== 'cash' ? method : 'card'),
+        actions.reserve(store.id, quantity, payingCash || method !== 'cash' ? method : 'card', testMode && !payingCash),
         new Promise((r) => setTimeout(r, pok ? 0 : 900)),
       ])
-      track('order_placed', { method: payingCash ? 'cash' : method, quantity })
+      track('order_placed', { method: payingCash ? 'cash' : testMode ? 'test' : method, quantity })
       if (payment) {
         track('payment_started')
         setPending({ orderId, payment })
@@ -149,7 +162,7 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
       </Sheet>
     )
 
-  const cardUnavailable = pok && !config?.cardReady && !payingCash
+  const cardUnavailable = pok && !config?.cardReady && !payingCash && !testMode
   return (
     <Sheet
       open
@@ -169,6 +182,8 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
               </>
             ) : payingCash ? (
               t('Reserve · pay {amount} at pickup', { amount: formatPrice(total) })
+            ) : testMode ? (
+              `TEST · ${formatPrice(total)} (no charge)`
             ) : pok ? (
               t('Continue to pay {amount}', { amount: formatPrice(total) })
             ) : (
@@ -256,10 +271,15 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
           <span>{t('Original value')}</span>
           <span className="line-through">{formatPrice(store.bag.originalPrice * quantity)}</span>
         </div>
-        <div className="flex justify-between text-lg font-bold">
+        <div className="flex justify-between text-lg font-bold" onClick={tapTotal}>
           <span>{t('Total')}</span>
           <span>{formatPrice(total)}</span>
         </div>
+        {testMode && (
+          <p role="status" className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900">
+            Test payment on: no card is charged and the order is marked as a test. Tap the total 5 times to turn it off.
+          </p>
+        )}
       </div>
 
     </Sheet>

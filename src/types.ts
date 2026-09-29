@@ -72,6 +72,8 @@ export interface Order {
   cancelReason?: string
   /** pending: waiting for the card payment (bag held); failed: never paid, the bag went back on sale. */
   paymentStatus?: 'pending' | 'failed'
+  /** A tester's order or sample data: no money moved, kept out of payouts and reports. */
+  isDemo?: boolean
   /** A problem the customer reported after pickup. Amounts in qindarka (1 L = 100). */
   complaint?: { status: 'open' | 'refunded' | 'rejected'; refundAmount?: number }
   paymentMethod: PaymentMethod

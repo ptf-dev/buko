@@ -38,6 +38,16 @@ const CATEGORIES = ['meals', 'bakery', 'groceries', 'dessert', 'drinks', 'other'
 const PAYMENT_METHODS = ['card', 'apple-pay', 'google-pay', 'paypal', 'cash']
 /** Orders a store should see and count: paid (or cash) reservations and their outcomes. */
 const LIVE_ORDER = "status in ('reserved','collected','no_show')"
+/** Accounts allowed to make test payments (TESTER_EMAILS, comma-separated). @param {string | undefined} email */
+function isTester(email) {
+  if (!email) return false
+  return (process.env.TESTER_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email.toLowerCase())
+}
+
 const RATING_TAGS = ['Great value', 'Great quantity', 'Great quality', 'Friendly staff', 'Easy pickup']
 const MAX_PER_ORDER = 4
 const CANCEL_CUTOFF_MS = 2 * 60 * 60_000
@@ -198,6 +208,12 @@ async function createOrder({ req, body }) {
   const { device, userId } = await customerContext(req, body.deviceId)
   if (!userId) throw new HttpError(401, 'Log in or create an account to reserve.')
   const cash = payment === 'cash'
+  // Tester payments: no card charged, order marked as a test (kept out of payouts and money reports).
+  const test = body.testPayment === true && !cash
+  if (test) {
+    const { rows: tu } = await query('select email from users where id = $1', [userId])
+    if (!isTester(tu[0]?.email)) throw new HttpError(403, 'Test payments aren’t enabled for this account.')
+  }
   if (cash) {
     const e = await cashEligibility(userId)
     if (!e.eligible) throw new HttpError(403, e.reason ?? 'Cash at pickup isn’t available for this order.')
@@ -219,13 +235,21 @@ async function createOrder({ req, body }) {
     const { start, end } = resolveWindow({ day: bag.pickup_day, start: bag.pickup_start, end: bag.pickup_end }, now)
     await c.query('update bags set quantity = quantity - $1, updated_at = now() where store_id = $2', [quantity, storeId])
     const ins = await c.query(
-      `insert into orders (id, store_id, bag_id, device_id, user_id, quantity, unit_price, unit_original_price, pickup_start, pickup_end, pickup_code, status, payment_method)
-       values ($1,$2,$3,$4,$12,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,$13,$11) returning *`,
-      [newId(), storeId, bag.id, device, quantity, bag.price, bag.original_price, start, end, pickupCode(), payment, userId, cash ? 'reserved' : 'pending_payment'],
+      `insert into orders (id, store_id, bag_id, device_id, user_id, quantity, unit_price, unit_original_price, pickup_start, pickup_end, pickup_code, status, payment_method, is_demo)
+       values ($1,$2,$3,$4,$12,$5,$6,$7,to_timestamp($8/1000.0),to_timestamp($9/1000.0),$10,$13,$11,$14) returning *`,
+      [newId(), storeId, bag.id, device, quantity, bag.price, bag.original_price, start, end, pickupCode(), payment, userId, cash || test ? 'reserved' : 'pending_payment', test],
     )
     const order = ins.rows[0]
     let paymentId = null
-    if (!cash) {
+    if (test) {
+      await c.query(`insert into payments (id, order_id, provider, provider_ref, amount, status) values ($1,$2,'test',$3,$4,'succeeded')`, [
+        newId('pay_'),
+        order.id,
+        `test_${order.id}`,
+        quantity * bag.price * 100,
+      ])
+      await recordSale(c, order)
+    } else if (!cash) {
       paymentId = newId('pay_')
       await c.query(`insert into payments (id, order_id, provider, amount, status) values ($1,$2,$3,$4,'pending')`, [
         paymentId,
@@ -514,7 +538,7 @@ const publicUser = (u) => ({
 /** @type {Handler} */
 async function me({ req }) {
   const user = await currentUser(req)
-  if (user?.role === 'customer') return { body: { user: { ...publicUser(user), cash: await cashEligibility(user.id) } } }
+  if (user?.role === 'customer') return { body: { user: { ...publicUser(user), cash: await cashEligibility(user.id), tester: isTester(user.email) || undefined } } }
   return { body: { user: user ? publicUser(user) : null } }
 }
 

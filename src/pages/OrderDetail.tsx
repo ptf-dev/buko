@@ -90,6 +90,9 @@ export function OrderDetail() {
   return (
     <div className="min-h-full bg-cream pb-10">
       <PageHeader title={t('Your order')} back />
+      {order.isDemo && (
+        <p className="bg-amber-100 px-4 py-2 text-center text-xs font-semibold text-amber-900">TEST ORDER · no money was charged</p>
+      )}
       {actionError && (
         <p role="alert" className="bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
           {actionError}
