@@ -105,7 +105,7 @@ const pok = {
   },
   async fetchPayment(ref) {
     const o = await pokOrder(ref)
-    return { status: pokPaid(o) ? 'succeeded' : /fail|declin|cancel|expir/i.test(o.status ?? '') ? 'failed' : 'pending', raw: o.status ?? null }
+    return { status: pokPaid(o) ? 'succeeded' : pokFailed(o) ? 'failed' : 'pending', raw: pokState(o) }
   },
   async completePayment(ref) {
     // POK's docs disagree about whether the form captures or the server must finish the order. Only called when
@@ -123,7 +123,7 @@ const pok = {
       }
     }
     const o = await pokOrder(ref)
-    return { status: pokPaid(o) ? 'succeeded' : 'pending', raw: o.status ?? null }
+    return { status: pokPaid(o) ? 'succeeded' : pokFailed(o) ? 'failed' : 'pending', raw: pokState(o) }
   },
   async refund() {
     // POK's SDK API has no refund call we can rely on: refunds are made in POK Business (Pagesat online) and
@@ -142,8 +142,8 @@ const pok = {
     if (!ref || !/^[A-Za-z0-9-]{1,64}$/.test(String(ref))) return null
     const o = await pokOrder(String(ref))
     const paid = pokPaid(o)
-    if (!paid && !/fail|declin|cancel|expir/i.test(o.status ?? '')) return null
-    return { eventId: `${ref}:${paid ? 'paid' : 'failed'}`, type: paid ? 'payment.succeeded' : 'payment.failed', paymentRef: String(ref), error: paid ? undefined : `POK: ${o.status}` }
+    if (!paid && !pokFailed(o)) return null
+    return { eventId: `${ref}:${paid ? 'paid' : 'failed'}`, type: paid ? 'payment.succeeded' : 'payment.failed', paymentRef: String(ref), error: paid ? undefined : `POK: ${pokState(o)}` }
   },
   async fetchSettlements() {
     // No settlement report in POK's SDK API; reconciliation lists our own records.
@@ -160,6 +160,8 @@ const PUBLIC_API = 'https://www.ngopu.app/api'
  * (caught on the first sale), while true on a lek API would charge 100× to a real card. Settle it once with
  * scripts/pok-check-amount.sh, then set POK_AMOUNT_IN_MINOR_UNITS=1 only if the dashboard shows 0.01 L.
  */
+// Checked on production (29 Sep 2026): amount 1 → "minimum is 50 ALL"; amount 50 → accepted and read back as 50 ALL.
+// So POK takes lek; this stays false unless POK changes it.
 const AMOUNT_IN_MINOR_UNITS = () => process.env.POK_AMOUNT_IN_MINOR_UNITS === '1'
 
 /** @param {number} qindarka */
@@ -211,12 +213,30 @@ async function pokOrder(ref) {
   const res = await fetch(`${pokBase()}/sdk-orders/${ref}`, { headers: { Authorization: `Bearer ${token}` } })
   const body = await res.json().catch(() => null)
   if (!res.ok) throw new Error(`POK read order failed: ${res.status}`)
-  return /** @type {{ id?: string, status?: string, amount?: number, capturedAmount?: number }} */ (body?.data?.sdkOrder || body?.data || {})
+  return /** @type {PokOrder} */ (body?.data?.sdkOrder || body?.data || {})
 }
 
-/** Same test as the ag-web-visionfx checkout: captured money, or a paid/captured/completed status. @param {{ status?: string, capturedAmount?: number }} o */
+/**
+ * An SDK order as POK returns it. Checked against production: there's no `status` field; the state is in
+ * isCaptured / isCompleted / isCanceled / isRefunded, amounts are in lek (a 50 ALL order reads back as 50).
+ * @typedef {{ id?: string, status?: string, amount?: number, capturedAmount?: number, isCaptured?: boolean, isCompleted?: boolean,
+ *   isCanceled?: boolean, isRefunded?: boolean, expiresAt?: string }} PokOrder
+ */
+
+/** Paid: captured money or POK's own flags (plus the ag-web-visionfx status test, in case a status appears). @param {PokOrder} o */
 export function pokPaid(o) {
-  return (Number(o.capturedAmount) || 0) > 0 || /paid|captur|success|complete/i.test(o.status ?? '')
+  return !!o.isCaptured || !!o.isCompleted || (Number(o.capturedAmount) || 0) > 0 || /paid|captur|success|complete/i.test(o.status ?? '')
+}
+
+/** Won't be paid any more: cancelled or past its expiry. @param {PokOrder} o */
+export function pokFailed(o) {
+  if (pokPaid(o)) return false
+  return !!o.isCanceled || /fail|declin|cancel|expir/i.test(o.status ?? '') || (!!o.expiresAt && new Date(o.expiresAt).getTime() < Date.now())
+}
+
+/** @param {PokOrder} o */
+function pokState(o) {
+  return o.status ?? (o.isCanceled ? 'canceled' : o.isCaptured ? 'captured' : o.isCompleted ? 'completed' : o.expiresAt && new Date(o.expiresAt).getTime() < Date.now() ? 'expired' : 'open')
 }
 
 /** @type {Record<string, PaymentProvider>} */

@@ -27,8 +27,10 @@ Built the same way as `ag-web-visionfx/pok` (`api/_lib/payments/providers.js`):
 | `POK_ENV` | `production` (default) or `staging` with staging keys |
 | `POK_AMOUNT_IN_MINOR_UNITS` | leave unset until checked (see below) |
 
-**Before the first real sale**, settle the one open question (lek or qindarka), exactly as in
-ag-web-visionfx:
+**Unit: settled — POK takes lek.** Checked on production on 29 Sep 2026: an order for `1` was refused
+("minimum is 50 ALL"), an order for `50` was accepted and read back as 50 ALL. So leave
+`POK_AMOUNT_IN_MINOR_UNITS` unset. POK's minimum order is 50 L, so bag prices start at 50 L.
+If POK ever changes this, re-run the check (it creates an unpaid order that expires):
 
 ```sh
 POK_KEY_ID=... POK_KEY_SECRET=... POK_MERCHANT_ID=... ./scripts/pok-check-amount.sh

@@ -881,7 +881,7 @@ function bagUpdates(body) {
   const u = {}
   if (body.title !== undefined) u.title = str(body.title, 'Title', { max: 60 })
   if (body.description !== undefined) u.description = str(body.description, 'Description', { max: 500 })
-  if (body.price !== undefined) u.price = int(body.price, 'Price', 0, 1_000_000)
+  if (body.price !== undefined) u.price = int(body.price, 'Price', 50, 1_000_000)
   if (body.originalPrice !== undefined) u.original_price = int(body.originalPrice, 'Original value', 0, 1_000_000)
   if (body.quantity !== undefined) u.quantity = int(body.quantity, 'Bags available', 0, 99)
   if (body.pickupDay !== undefined) u.pickup_day = oneOf(body.pickupDay, 'Pickup day', ['today', 'tomorrow'])
