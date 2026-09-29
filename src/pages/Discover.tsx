@@ -79,7 +79,17 @@ export function Discover() {
   return (
     <div className="pb-8">
       <header className="sticky top-0 z-20 border-b border-line/70 bg-white/95 px-4 pt-[calc(env(safe-area-inset-top)+14px)] pb-3 backdrop-blur">
-        <LocationButton />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1">
+            <LocationButton />
+          </div>
+          <span className="flex shrink-0 items-center gap-1.5" aria-label="Ngopu">
+            <img src="/favicon.svg" alt="" className="h-7 w-7" />
+            <span className="hidden text-lg font-black tracking-tight text-brand min-[360px]:inline" aria-hidden>
+              ngopu<span className="text-sun">.</span>
+            </span>
+          </span>
+        </div>
       </header>
 
       <OutOfAreaNotice listings={all} className="mx-4 mt-4" />

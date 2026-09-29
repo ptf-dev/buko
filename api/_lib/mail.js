@@ -124,30 +124,3 @@ export function testEmail(p) {
   return sendMail({ to: p.to, kind: 'test', subject: `[Test] ${e.subject}`, html: e.html, text: e.text })
 }
 
-/** Temporary SMTP diagnosis (DIAG_TOKEN): checks the login with the mail server. Never returns the password. */
-export async function diagnoseSmtp() {
-  const user = process.env.SMTP_USER ?? ''
-  const from = process.env.MAIL_FROM ?? ''
-  const out = {
-    configured: mailConfigured(),
-    host: process.env.SMTP_HOST ?? null,
-    port: process.env.SMTP_PORT ?? null,
-    user: user.replace(/^(.).*(@.*)$/, '$1***$2'),
-    userHasSpaces: /\s/.test(user),
-    passLength: (process.env.SMTP_PASS ?? '').length,
-    passHasSpaces: /\s/.test(process.env.SMTP_PASS ?? ''),
-    fromMatchesUser: from.toLowerCase().includes(user.toLowerCase().trim()),
-    from: from.replace(/<(.).*(@.*)>/, '<$1***$2>'),
-    verify: /** @type {string} */ ('not run'),
-  }
-  if (out.configured) {
-    try {
-      await getTransport().verify()
-      out.verify = 'ok'
-    } catch (err) {
-      out.verify = err instanceof Error ? err.message : String(err)
-    }
-  }
-  const { rows } = await query(`select kind, status, error, created_at from email_log order by created_at desc limit 8`)
-  return { ...out, recent: rows }
-}
