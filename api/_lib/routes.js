@@ -1,12 +1,32 @@
 // @ts-check
-import { createSession, currentUser, destroySession, hashPassword, newId, requireUser, verifyPassword } from './auth.js'
+import { createSession, currentUser, destroySession, hashPassword, newId, requireFinance, requireUser, verifyPassword } from './auth.js'
+import {
+  checkTotp,
+  clientIp,
+  completePasswordReset,
+  confirmEmail,
+  consumeToken,
+  issueToken,
+  limit,
+  loginKeys,
+  newTotpSecret,
+  otpauthUrl,
+  record,
+  recoveryCodes,
+  requestPasswordReset,
+  sendVerification,
+  verifySecondFactor,
+} from './accounts.js'
 import { HttpError, query, tx } from './db.js'
 import { resolveWindow, TIMEZONE } from './time.js'
 import { deviceId, email, int, num, oneOf, optStr, password, str } from './validate.js'
 import { cashEligibility, COMPLAINT_REASONS, COMPLAINT_WINDOW_HOURS, recordCancellation, recordCashCollected, recordClose, recordSale } from './finance.js'
 import { queueRefund } from './payments/queue.js'
-import { expirePendingPayments, processRefunds, startPayment } from './payments/service.js'
+import { expirePendingPayments, failPayment, PAYMENT_HOLD_MINUTES, processRefunds, startPayment, verifyPayment } from './payments/service.js'
+import { pokConfigured, pokEnv } from './payments/providers.js'
 import { FINANCE_ROUTES } from './finance-routes.js'
+import { adminMonitoring, adminResolveError, reportError, trackEvents } from './monitoring.js'
+import { fcmConfigured, removeSubscription, saveSubscription, sendDueReminders, sendReceipt, webPushConfigured } from './notify.js'
 
 /**
  * @typedef {{ req: Request, url: URL, params: Record<string, string>, body: any, raw?: string, secure: boolean }} Ctx
@@ -101,8 +121,8 @@ function toOrder(r) {
     pickupCode: r.pickup_code,
     createdAt: new Date(r.created_at).getTime(),
     // A no-show is closed on the server; the apps already show a reserved order past its window as "missed".
-    status: r.status === 'no_show' || r.status === 'pending_payment' ? 'reserved' : r.status,
-    paymentStatus: r.status === 'pending_payment' ? 'pending' : undefined,
+    status: r.status === 'no_show' || r.status === 'pending_payment' ? 'reserved' : r.status === 'expired' ? 'cancelled' : r.status,
+    paymentStatus: r.status === 'pending_payment' ? 'pending' : r.status === 'expired' ? 'failed' : undefined,
     cancelledBy: r.cancelled_by ?? undefined,
     cancelReason: r.cancelled_by === 'store' ? (r.cancel_reason ?? undefined) : undefined,
     complaint: r.complaint_status ? { status: r.complaint_status, refundAmount: r.complaint_refund ?? undefined } : undefined,
@@ -160,6 +180,8 @@ async function health() {
 
 /** @type {Handler} */
 async function listStores() {
+  // The app polls this every minute, so it doubles as the clock for pickup reminders.
+  await sendDueReminders().catch((err) => console.error('reminders failed', err))
   const { rows } = await query(`${STORE_SELECT} where s.status = 'active' and b.id is not null order by s.name`)
   return { body: { stores: rows.map(toStore) }, headers: { 'Cache-Control': 'no-store' } }
 }
@@ -214,11 +236,70 @@ async function createOrder({ req, body }) {
     }
     return { order, paymentId }
   })
-  if (!created.paymentId) return { status: 201, body: { order: toOrder(created.order) } }
+  if (!created.paymentId) {
+    await sendReceipt(created.order.id)
+    return { status: 201, body: { order: toOrder(created.order) } }
+  }
   const { rows: u } = await query('select email from users where id = $1', [userId])
   const started = await startPayment(created.order, created.paymentId, u[0]?.email ?? null)
-  // redirectUrl is set when the customer must finish paying on the provider's page (real providers).
-  return { status: 201, body: { order: toOrder(started.order), payment: { redirectUrl: started.redirectUrl } } }
+  // The app shows the provider's card form for clientRef (POK) or sends the customer to redirectUrl.
+  return { status: 201, body: { order: toOrder(started.order), payment: paymentView(started) } }
+}
+
+/** @param {{ redirectUrl: string | null, clientRef: string | null }} started */
+function paymentView(started) {
+  const provider = process.env.PAYMENT_PROVIDER ?? 'simulated'
+  return { provider, redirectUrl: started.redirectUrl, sdkOrderId: started.clientRef, env: provider === 'pok' ? pokEnv() : undefined }
+}
+
+/**
+ * The customer's payment form reported success (or the app came back to a pending order): read the payment back
+ * from the provider and confirm the reservation if it's paid. Also returns what's needed to show the form again.
+ * @type {Handler}
+ */
+async function verifyOrderPayment({ req, params, body }) {
+  const who = await customerContext(req, body.deviceId)
+  const { rows: own } = await query(`select * from orders where id = $1 and ${OWNS_ORDER}`, [params.id, who.device, who.userId])
+  const o = own[0]
+  if (!o) throw new HttpError(404, 'Order not found.')
+  if (o.status !== 'pending_payment' && o.status !== 'expired') return { body: { order: toOrder(o) } }
+  const order = await verifyPayment(o.id)
+  const { rows } = await query(`select provider_ref from payments where order_id = $1 and status = 'pending' order by created_at desc limit 1`, [o.id])
+  const pending = order.status === 'pending_payment' && rows[0]?.provider_ref
+  return { body: { order: toOrder(order), payment: pending ? paymentView({ redirectUrl: null, clientRef: rows[0].provider_ref }) : null } }
+}
+
+/** Where the app registers for push, and which kinds are switched on. Public. @type {Handler} */
+async function pushConfig() {
+  return { body: { vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? null, web: webPushConfigured(), native: fcmConfigured() } }
+}
+
+/** @type {Handler} */
+async function pushSubscribe({ req, body }) {
+  const user = await requireUser(req, 'customer')
+  const kind = /** @type {'web' | 'fcm'} */ (oneOf(body.kind, 'Kind', ['web', 'fcm']))
+  const endpoint = str(body.endpoint, 'Endpoint', { max: 1000 })
+  if (kind === 'web' && !/^https:\/\//.test(endpoint)) throw new HttpError(400, 'Bad push endpoint.')
+  const keys = kind === 'web' ? body.keys : undefined
+  if (kind === 'web' && (typeof keys?.p256dh !== 'string' || typeof keys?.auth !== 'string')) throw new HttpError(400, 'Bad push keys.')
+  await saveSubscription(user.id, { kind, endpoint, keys: keys && { p256dh: keys.p256dh, auth: keys.auth } })
+  return { body: { ok: true } }
+}
+
+/** @type {Handler} */
+async function pushUnsubscribe({ req, body }) {
+  const user = await requireUser(req, 'customer')
+  await removeSubscription(user.id, str(body.endpoint, 'Endpoint', { max: 1000 }))
+  return { body: { ok: true } }
+}
+
+/** Which payment methods the app should offer. Public. @type {Handler} */
+async function paymentConfig() {
+  const provider = process.env.PAYMENT_PROVIDER ?? 'simulated'
+  return {
+    body: { provider, cardReady: provider === 'pok' ? pokConfigured() : true, env: provider === 'pok' ? pokEnv() : undefined, holdMinutes: PAYMENT_HOLD_MINUTES },
+    headers: { 'Cache-Control': 'public, max-age=300' },
+  }
 }
 
 /** A store's cover photo. Public and cached for a year (the URL changes with every upload). @type {Handler} */
@@ -296,6 +377,17 @@ async function ownOrder(id, who) {
 /** @type {Handler} */
 async function cancelOrder({ req, params, body }) {
   const who = await customerContext(req, body.deviceId)
+  // Abandoning an unpaid order releases the bag at once instead of after the payment hold.
+  const { rows: pend } = await query(`select id from orders where id = $1 and ${OWNS_ORDER} and status = 'pending_payment'`, [params.id, who.device, who.userId])
+  if (pend[0]) {
+    // The form may have taken the money a moment before the customer closed it: ask the provider first.
+    const checked = await verifyPayment(params.id).catch(() => null)
+    if (checked && checked.status !== 'pending_payment') return { body: { order: toOrder(checked) } }
+    const { rows: pay } = await query(`select id, provider from payments where order_id = $1 and status = 'pending'`, [params.id])
+    if (pay[0]) await failPayment(pay[0].provider, null, 'Abandoned by the customer', pay[0].id)
+    const { rows } = await query('select * from orders where id = $1', [params.id])
+    return { body: { order: toOrder(rows[0]) } }
+  }
   const order = await tx(async (c) => {
     const { rows } = await c.query(`select * from orders where id = $1 and ${OWNS_ORDER} for update`, [params.id, who.device, who.userId])
     const o = rows[0]
@@ -406,7 +498,18 @@ async function rateOrder({ req, params, body }) {
 /* ------------------------------------------------------------------ */
 
 /** @param {any} u */
-const publicUser = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, storeId: u.storeId ?? u.store_id ?? null, storeStatus: u.storeStatus ?? null })
+const publicUser = (u) => ({
+  id: u.id,
+  email: u.email,
+  name: u.name,
+  role: u.role,
+  storeId: u.storeId ?? u.store_id ?? null,
+  storeStatus: u.storeStatus ?? null,
+  emailVerified: Boolean(u.emailVerifiedAt ?? u.email_verified_at),
+  language: u.language ?? null,
+  twoFactor: { enabled: Boolean(u.totpEnabledAt ?? u.totp_enabled_at), required: u.role === 'admin' },
+  permissions: u.permissions ?? [],
+})
 
 /** @type {Handler} */
 async function me({ req }) {
@@ -427,33 +530,154 @@ async function setup({ body, secure }) {
     await c.query('lock table users in exclusive mode')
     const { rows } = await c.query(`select 1 from users where role = 'admin' limit 1`)
     if (rows[0]) throw new HttpError(409, 'Ngopu is already set up. Log in instead.')
-    await c.query(`insert into users (id, email, name, password_hash, role) values ($1,$2,$3,$4,'admin')`, [id, mail, name, hash])
+    await c.query(`insert into users (id, email, name, password_hash, role, permissions) values ($1,$2,$3,$4,'admin',array['finance'])`, [id, mail, name, hash])
   })
   const { cookie } = await createSession(id, secure)
   return { status: 201, body: { user: { id, email: mail, name, role: 'admin', storeId: null, storeStatus: null } }, headers: { 'Set-Cookie': cookie } }
 }
 
 /** @type {Handler} */
-async function login({ body, secure }) {
+async function login({ req, body, secure }) {
   const mail = email(body.email)
   const pw = str(body.password, 'Password', { max: 200 })
+  const ip = clientIp(req)
+  const keys = loginKeys(mail, ip)
+  await limit(...keys)
   const { rows } = await query(
     `select u.*, s.status as "storeStatus" from users u left join stores s on s.id = u.store_id where u.email = $1`,
     [mail],
   )
   const user = rows[0]
-  if (!user || !(await verifyPassword(pw, user.password_hash))) throw new HttpError(401, 'Wrong email or password.')
+  if (!user || !(await verifyPassword(pw, user.password_hash))) {
+    await record(keys.map((k) => k[0]), false)
+    throw new HttpError(401, 'Wrong email or password.')
+  }
+  await record(keys.map((k) => k[0]), true)
   // The customer app and the store dashboard have separate kinds of account.
   const fromApp = body.client === 'app'
   if (fromApp && user.role !== 'customer')
     throw new HttpError(403, 'This email belongs to a store or team account. Log in to the dashboard instead, or use another email for the app.')
   if (!fromApp && user.role === 'customer') throw new HttpError(403, 'This is a customer account. Log in in the Ngopu app.')
+  if (fromApp && (body.language === 'sq' || body.language === 'en') && body.language !== user.language) {
+    await query('update users set language = $2 where id = $1', [user.id, body.language])
+    user.language = body.language
+  }
+  // Two-factor login: the password alone only earns a short-lived challenge for the code step.
+  if (!fromApp && user.totp_enabled_at) {
+    const challenge = await issueToken(user.id, 'login_2fa', 5)
+    return { body: { twoFactor: { challenge } } }
+  }
   const { cookie, token } = await createSession(user.id, secure, fromApp)
   if (fromApp) {
     if (body.deviceId) await claimDeviceOrders(user.id, deviceId(body.deviceId))
     return { body: { user: publicUser(user), token } }
   }
   return { body: { user: publicUser(user) }, headers: { 'Set-Cookie': cookie } }
+}
+
+/** Second login step for the dashboard: the code from the authenticator app (or a recovery code). @type {Handler} */
+async function loginTwoFactor({ body, secure }) {
+  const userId = await consumeToken(body.challenge, 'login_2fa', { keep: true })
+  await verifySecondFactor(userId, body.code)
+  await consumeToken(body.challenge, 'login_2fa')
+  const { rows } = await query(`select u.*, s.status as "storeStatus" from users u left join stores s on s.id = u.store_id where u.id = $1`, [userId])
+  const { cookie } = await createSession(userId, secure)
+  return { body: { user: publicUser(rows[0]) }, headers: { 'Set-Cookie': cookie } }
+}
+
+/** Starts two-factor setup: a new secret to scan. Not active until confirmed with a code. @type {Handler} */
+async function twoFactorSetup({ req }) {
+  const user = await requireUser(req, undefined, { allowWithout2fa: true })
+  if (user.role === 'customer') throw new HttpError(403, 'Two-factor login is for the dashboard.')
+  if (user.totpEnabledAt) throw new HttpError(409, 'Two-factor login is already on.')
+  const secret = newTotpSecret()
+  await query('update users set totp_secret = $2 where id = $1', [user.id, secret])
+  return { body: { secret, otpauthUrl: otpauthUrl(secret, user.email) } }
+}
+
+/** Confirms setup with a first code and hands out recovery codes (shown once). @type {Handler} */
+async function twoFactorEnable({ req, body }) {
+  const user = await requireUser(req, undefined, { allowWithout2fa: true })
+  const { rows } = await query('select totp_secret, totp_enabled_at from users where id = $1', [user.id])
+  if (!rows[0]?.totp_secret) throw new HttpError(409, 'Start the setup first.')
+  if (rows[0].totp_enabled_at) throw new HttpError(409, 'Two-factor login is already on.')
+  await limit([`2fa:${user.id}`, 5, 15])
+  if (!checkTotp(rows[0].totp_secret, body.code)) {
+    await record([`2fa:${user.id}`], false)
+    throw new HttpError(400, 'That code isn’t right. Check the time on your phone and try again.')
+  }
+  await record([`2fa:${user.id}`], true)
+  const { codes, hashes } = recoveryCodes()
+  await query('update users set totp_enabled_at = now(), totp_recovery = $2 where id = $1', [user.id, hashes])
+  return { body: { recoveryCodes: codes } }
+}
+
+/** Turns two-factor off (partners only; admins must keep it). Needs the password and a current code. @type {Handler} */
+async function twoFactorDisable({ req, body }) {
+  const user = await requireUser(req, 'partner')
+  const { rows } = await query('select password_hash from users where id = $1', [user.id])
+  if (!(await verifyPassword(str(body.password, 'Password', { max: 200 }), rows[0].password_hash))) throw new HttpError(401, 'Wrong password.')
+  await verifySecondFactor(user.id, body.code)
+  await query('update users set totp_secret = null, totp_enabled_at = null, totp_recovery = null where id = $1', [user.id])
+  return { body: { ok: true } }
+}
+
+/** Lost phone: another admin resets a team member's two-factor login so they set it up again. @type {Handler} */
+async function adminResetTwoFactor({ req, params }) {
+  const user = await requireUser(req, 'admin')
+  if (params.id === user.id) throw new HttpError(400, 'Ask another admin to reset your two-factor login.')
+  const { rowCount } = await query(
+    `update users set totp_secret = null, totp_enabled_at = null, totp_recovery = null where id = $1 and role in ('admin','partner')`,
+    [params.id],
+  )
+  if (!rowCount) throw new HttpError(404, 'User not found.')
+  await query('delete from sessions where user_id = $1', [params.id])
+  await query('insert into audit_log (actor_id, action, target) values ($1,$2,$3)', [user.id, 'user.2fa_reset', params.id])
+  return { body: { ok: true } }
+}
+
+/** Grants or removes the finance permission. Only admins who have it can change it. @type {Handler} */
+async function adminSetPermissions({ req, params, body }) {
+  const user = await requireFinance(req)
+  const finance = !!body.finance
+  if (params.id === user.id && !finance) throw new HttpError(400, 'You can’t remove your own finance permission.')
+  const { rowCount } = await query(
+    `update users set permissions = case when $2 then array(select distinct unnest(permissions || array['finance'])) else array_remove(permissions, 'finance') end
+      where id = $1 and role = 'admin'`,
+    [params.id, finance],
+  )
+  if (!rowCount) throw new HttpError(404, 'Admin not found.')
+  await query('insert into audit_log (actor_id, action, target, details) values ($1,$2,$3,$4)', [user.id, 'user.permissions', params.id, JSON.stringify({ finance })])
+  return { body: { ok: true } }
+}
+
+/** @type {Handler} */
+async function forgotPassword({ req, body }) {
+  await requestPasswordReset(email(body.email), clientIp(req))
+  return { body: { ok: true } }
+}
+
+/** @type {Handler} */
+async function resetPasswordHandler({ body }) {
+  const hash = await hashPassword(password(body.password))
+  const { role } = await completePasswordReset(body.token, hash)
+  return { body: { ok: true, role } }
+}
+
+/** @type {Handler} */
+async function verifyEmailHandler({ body }) {
+  await confirmEmail(body.token)
+  return { body: { ok: true } }
+}
+
+/** @type {Handler} */
+async function resendVerification({ req }) {
+  const user = await requireUser(req, 'customer')
+  if (user.emailVerifiedAt) return { body: { ok: true, alreadyVerified: true } }
+  await limit([`verify:${user.id}`, 3, 60])
+  await record([`verify:${user.id}`], false)
+  await sendVerification(user)
+  return { body: { ok: true } }
 }
 
 /** Attaches orders placed on this device before signing in to the customer's account. */
@@ -464,25 +688,31 @@ async function claimDeviceOrders(userId, device) {
 
 /** Customer sign-up from the app. Returns a bearer token (no cookie). */
 /** @type {Handler} */
-async function signup({ body, secure }) {
+async function signup({ req, body, secure }) {
   const name = str(body.name, 'Name', { max: 80 })
   const mail = email(body.email)
   const hash = await hashPassword(password(body.password))
   const id = newId('u_')
+  const ip = clientIp(req)
+  await limit([`signup-ip:${ip}`, 10, 60])
+  await record([`signup-ip:${ip}`], false)
   const exists = await query('select 1 from users where email = $1', [mail])
   if (exists.rows[0]) throw new HttpError(409, 'An account with this email already exists. Log in instead.')
-  await query(`insert into users (id, email, name, password_hash, role) values ($1,$2,$3,$4,'customer')`, [id, mail, name, hash])
+  const language = body.language === 'en' ? 'en' : 'sq'
+  await query(`insert into users (id, email, name, password_hash, role, language) values ($1,$2,$3,$4,'customer',$5)`, [id, mail, name, hash, language])
   if (body.deviceId) await claimDeviceOrders(id, deviceId(body.deviceId))
   const { token } = await createSession(id, secure, true)
-  return { status: 201, body: { user: { id, email: mail, name, role: 'customer', storeId: null, storeStatus: null }, token } }
+  await sendVerification({ id, email: mail, name, language })
+  return { status: 201, body: { user: publicUser({ id, email: mail, name, role: 'customer', language }), token } }
 }
 
 /** @type {Handler} */
 async function updateMe({ req, body }) {
   const user = await requireUser(req, 'customer')
-  const name = str(body.name, 'Name', { max: 80 })
-  await query('update users set name = $2 where id = $1', [user.id, name])
-  return { body: { user: publicUser({ ...user, name }) } }
+  const name = body.name === undefined ? user.name : str(body.name, 'Name', { max: 80 })
+  const language = body.language === 'sq' || body.language === 'en' ? body.language : user.language
+  await query('update users set name = $2, language = $3 where id = $1', [user.id, name, language])
+  return { body: { user: publicUser({ ...user, name, language }) } }
 }
 
 /** Deletes a customer account (required by the app stores). Past orders stay for the store's records, unlinked from the person. */
@@ -822,22 +1052,26 @@ async function adminOrders({ req, url }) {
 async function adminTeam({ req }) {
   await requireUser(req, 'admin')
   const { rows } = await query(
-    `select id, name, email, created_at as "createdAt", last_login_at as "lastLoginAt" from users where role = 'admin' order by created_at`,
+    `select id, name, email, created_at as "createdAt", last_login_at as "lastLoginAt", 'finance' = any(permissions) as finance,
+            totp_enabled_at is not null as "twoFactor"
+       from users where role = 'admin' order by created_at`,
   )
   return { body: { admins: rows } }
 }
 
 /** @type {Handler} */
 async function adminAddTeam({ req, body }) {
-  await requireUser(req, 'admin')
+  const user = await requireUser(req, 'admin')
   const name = str(body.name, 'Name', { max: 80 })
   const mail = email(body.email)
   const hash = await hashPassword(password(body.password))
   const exists = await query('select 1 from users where email = $1', [mail])
   if (exists.rows[0]) throw new HttpError(409, 'An account with this email already exists.')
   const id = newId('u_')
-  await query(`insert into users (id, email, name, password_hash, role) values ($1,$2,$3,$4,'admin')`, [id, mail, name, hash])
-  return { status: 201, body: { admin: { id, name, email: mail } } }
+  // Only admins with the finance permission can hand it out.
+  const finance = !!body.finance && user.permissions.includes('finance')
+  await query(`insert into users (id, email, name, password_hash, role, permissions) values ($1,$2,$3,$4,'admin',$5)`, [id, mail, name, hash, finance ? ['finance'] : []])
+  return { status: 201, body: { admin: { id, name, email: mail, finance } } }
 }
 
 /** @type {Handler} */
@@ -983,6 +1217,15 @@ const ROUTES = [
   ['DELETE', 'admin/stores/:id/photo', adminDeletePhoto],
   ['POST', 'orders', createOrder],
   ['GET', 'orders', deviceOrders],
+  ['POST', 'orders/:id/payment', verifyOrderPayment],
+  ['GET', 'payments/config', paymentConfig],
+  ['GET', 'push/config', pushConfig],
+  ['POST', 'telemetry/error', reportError],
+  ['POST', 'telemetry/events', trackEvents],
+  ['GET', 'admin/monitoring', adminMonitoring],
+  ['POST', 'admin/monitoring/errors/:id/resolve', adminResolveError],
+  ['POST', 'push/subscribe', pushSubscribe],
+  ['POST', 'push/unsubscribe', pushUnsubscribe],
   ['POST', 'orders/:id/cancel', cancelOrder],
   ['POST', 'orders/:id/collect', collectOrder],
   ['POST', 'orders/:id/rate', rateOrder],
@@ -990,6 +1233,16 @@ const ROUTES = [
   ['GET', 'auth/me', me],
   ['POST', 'auth/setup', setup],
   ['POST', 'auth/login', login],
+  ['POST', 'auth/login/2fa', loginTwoFactor],
+  ['POST', 'auth/2fa/setup', twoFactorSetup],
+  ['POST', 'auth/2fa/enable', twoFactorEnable],
+  ['POST', 'auth/2fa/disable', twoFactorDisable],
+  ['POST', 'auth/forgot', forgotPassword],
+  ['POST', 'auth/reset', resetPasswordHandler],
+  ['POST', 'auth/verify-email', verifyEmailHandler],
+  ['POST', 'auth/verify-email/resend', resendVerification],
+  ['POST', 'admin/users/:id/2fa-reset', adminResetTwoFactor],
+  ['PATCH', 'admin/team/:id', adminSetPermissions],
   ['POST', 'auth/logout', logout],
   ['POST', 'auth/signup', signup],
   ['PATCH', 'auth/me', updateMe],
@@ -1024,10 +1277,10 @@ export function match(method, path) {
     /** @type {Record<string, string>} */
     const params = {}
     if (pp.every((seg, i) => (seg.startsWith(':') ? ((params[seg.slice(1)] = decodeURIComponent(parts[i])), true) : seg === parts[i])))
-      return { handler, params }
+      return { handler, params, pattern }
   }
   return null
 }
 
 /** Endpoints the native apps call from another origin (no cookies involved). */
-export const PUBLIC_PREFIXES = ['stores', 'orders', 'health', 'auth']
+export const PUBLIC_PREFIXES = ['stores', 'orders', 'health', 'auth', 'payments/config', 'push', 'telemetry']

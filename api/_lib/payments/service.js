@@ -8,6 +8,7 @@ import { HttpError, query, tx } from '../db.js'
 import { audit, recordCancellation, recordSale } from '../finance.js'
 import { getProvider } from './providers.js'
 import { queueRefund } from './queue.js'
+import { sendReceipt } from '../notify.js'
 
 /** Minutes a bag stays held while the customer pays. */
 export const PAYMENT_HOLD_MINUTES = 10
@@ -40,8 +41,41 @@ export async function startPayment(order, paymentId, email) {
     throw new HttpError(502, 'We couldn’t start the payment. You haven’t been charged. Please try again.')
   }
   await query('update payments set provider_ref = $2, updated_at = now() where id = $1', [paymentId, start.providerRef])
-  if (start.status === 'succeeded') return { order: await confirmPayment(provider.name, start.providerRef), redirectUrl: null }
-  return { order, redirectUrl: start.redirectUrl ?? null }
+  if (start.status === 'succeeded') return { order: await confirmPayment(provider.name, start.providerRef), redirectUrl: null, clientRef: null }
+  return { order, redirectUrl: start.redirectUrl ?? null, clientRef: start.clientRef ?? null }
+}
+
+/**
+ * The app says the customer finished paying. Never trusted on its own: the payment is read back from the
+ * provider and, if it still looks uncaptured, finished there (POK: guest-confirm / capture) and read again.
+ * Returns the order as it now stands (reserved once paid, still pending otherwise).
+ * @param {string} orderId
+ */
+export async function verifyPayment(orderId) {
+  const { rows } = await query(`select * from payments where order_id = $1 order by created_at desc limit 1`, [orderId])
+  const p = rows[0]
+  if (!p) throw new HttpError(404, 'Payment not found.')
+  const provider = getProvider(p.provider)
+  if (p.status === 'pending' && p.provider_ref && provider.fetchPayment) {
+    let check = await provider.fetchPayment(p.provider_ref)
+    if (check.status === 'pending' && provider.completePayment) check = await provider.completePayment(p.provider_ref)
+    if (check.status === 'succeeded') await confirmPayment(provider.name, p.provider_ref)
+    else if (check.status === 'failed') await failPayment(provider.name, p.provider_ref, `Declined (${check.raw ?? 'no status'})`)
+  }
+  const { rows: o } = await query('select * from orders where id = $1', [orderId])
+  return o[0]
+}
+
+/**
+ * An admin refunded a payment by hand in the provider's dashboard (POK has no refund API) and marks it done.
+ * @param {string} refundId @param {string} reference what the provider's dashboard shows, for the audit trail
+ */
+export async function markRefundDone(refundId, reference) {
+  const { rowCount } = await query(
+    `update refunds set status = 'succeeded', provider_ref = $2, last_error = null, updated_at = now() where id = $1 and status in ('manual','failed')`,
+    [refundId, reference || null],
+  )
+  if (!rowCount) throw new HttpError(409, 'Only refunds waiting to be made by hand can be marked done.')
 }
 
 /**
@@ -84,6 +118,7 @@ export async function confirmPayment(providerName, paymentRef) {
     return o
   })
   await processRefunds()
+  if (result?.status === 'reserved') await sendReceipt(result.id)
   return result
 }
 
@@ -144,7 +179,7 @@ export async function processRefunds() {
     const p = pr[0]
     try {
       const res = await getProvider(p.provider).refund({ paymentRef: p.provider_ref, refundId: r.id, amount: r.amount, reason: r.reason })
-      const status = res.status === 'succeeded' ? 'succeeded' : res.status === 'failed' ? 'failed' : 'sent'
+      const status = res.status === 'succeeded' ? 'succeeded' : res.status === 'failed' ? 'failed' : res.status === 'manual' ? 'manual' : 'sent'
       await query('update refunds set status = $2, provider_ref = $3, last_error = $4, updated_at = now() where id = $1', [r.id, status, res.providerRef, res.error ?? null])
       if (status === 'succeeded') done++
     } catch (err) {

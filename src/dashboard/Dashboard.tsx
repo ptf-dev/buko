@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom
 import { AuthProvider, ToastProvider, useAuth, useResource } from './data'
 import { AdminOrders, AdminOverviewPage, AdminPartnerDetail, AdminPartners, AdminTeam } from './pages/Admin'
 import { Apply, Login, NoDatabase, Pending, Setup } from './pages/Auth'
+import { AdminMonitoring } from './pages/Monitoring'
+import { RequireTwoFactor } from './pages/Security'
 import { PartnerEarnings } from './pages/Earnings'
 import { AdminBilling, AdminComplaints, AdminFinance, AdminFinanceSettings, AdminPaymentsMonitor, AdminPayouts, AdminRequests } from './pages/Finance'
 import { PartnerListing, PartnerOrders, PartnerStore, PartnerToday } from './pages/Partner'
@@ -41,14 +43,32 @@ function PartnerArea() {
 function AdminArea() {
   const { user } = useAuth()
   // Pending application count for the sidebar badge.
-  const overview = useResource<AdminOverview>(user?.role === 'admin' ? 'admin/overview?days=7' : null, 60_000)
+  const overview = useResource<AdminOverview>(user?.role === 'admin' && user.twoFactor?.enabled ? 'admin/overview?days=7' : null, 60_000)
   if (!user) return <Navigate to="/login" replace />
   if (user.role !== 'admin') return <Navigate to="/" replace />
+  if (!user.twoFactor?.enabled) return <RequireTwoFactor />
+  const finance = !!user.permissions?.includes('finance')
   return (
-    <Shell nav={adminNav(overview.data?.counts.pending ?? 0, (overview.data?.counts.open_complaints ?? 0) + (overview.data?.counts.pending_bank ?? 0))} context="Ngopu admin">
+    <Shell
+      nav={adminNav(overview.data?.counts.pending ?? 0, (overview.data?.counts.open_complaints ?? 0) + (overview.data?.counts.pending_bank ?? 0), finance)}
+      context="Ngopu admin"
+    >
       <Outlet />
     </Shell>
   )
+}
+
+/** Money pages need the finance permission. */
+function FinanceOnly() {
+  const { user } = useAuth()
+  if (!user?.permissions?.includes('finance'))
+    return (
+      <div className="mx-auto max-w-lg py-16 text-center">
+        <h1 className="text-xl font-bold">Finance is limited to some admins</h1>
+        <p className="mt-2 text-muted">You need the finance permission to see payouts, refunds and billing. Ask an admin who has it to give it to you in Team & settings.</p>
+      </div>
+    )
+  return <Outlet />
 }
 
 function GuestOnly({ children }: { children: ReactNode }) {
@@ -82,13 +102,16 @@ function Routed() {
         <Route path="partners" element={<AdminPartners />} />
         <Route path="partners/:id" element={<AdminPartnerDetail />} />
         <Route path="orders" element={<AdminOrders />} />
-        <Route path="finance" element={<AdminFinance />} />
-        <Route path="finance/payouts" element={<AdminPayouts />} />
-        <Route path="finance/requests" element={<AdminRequests />} />
-        <Route path="finance/payments" element={<AdminPaymentsMonitor />} />
-        <Route path="finance/complaints" element={<AdminComplaints />} />
-        <Route path="finance/stores" element={<AdminBilling />} />
-        <Route path="finance/settings" element={<AdminFinanceSettings />} />
+        <Route path="finance" element={<FinanceOnly />}>
+          <Route index element={<AdminFinance />} />
+          <Route path="payouts" element={<AdminPayouts />} />
+          <Route path="requests" element={<AdminRequests />} />
+          <Route path="payments" element={<AdminPaymentsMonitor />} />
+          <Route path="complaints" element={<AdminComplaints />} />
+          <Route path="stores" element={<AdminBilling />} />
+          <Route path="settings" element={<AdminFinanceSettings />} />
+        </Route>
+        <Route path="monitoring" element={<AdminMonitoring />} />
         <Route path="team" element={<AdminTeam />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

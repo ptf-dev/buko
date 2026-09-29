@@ -7,6 +7,7 @@ import { EmptyState, PageHeader } from '../components/PageHeader'
 import { formatPrice, formatRange, isPickupNow } from '../lib/format'
 import { useAppState, useNow, useSync } from '../state/store'
 import type { Order } from '../types'
+import { t } from '../i18n'
 
 const STATUS_LABEL: Record<Order['status'], string> = {
   reserved: 'Reserved',
@@ -30,16 +31,16 @@ export function Orders() {
 
   return (
     <div>
-      <PageHeader title="Orders" />
+      <PageHeader title={t('Orders')} />
       <div className="sticky top-14 z-20 grid grid-cols-2 border-b border-line bg-white text-sm font-semibold">
-        {(['upcoming', 'past'] as const).map((t) => (
+        {(['upcoming', 'past'] as const).map((k) => (
           <button
-            key={t}
+            key={k}
             type="button"
-            onClick={() => setTab(t)}
-            className={`border-b-2 py-3 ${tab === t ? 'border-brand text-brand' : 'border-transparent text-muted'}`}
+            onClick={() => setTab(k)}
+            className={`border-b-2 py-3 ${tab === k ? 'border-brand text-brand' : 'border-transparent text-muted'}`}
           >
-            {t === 'upcoming' ? `Upcoming (${upcoming.length})` : `Past (${past.length})`}
+            {k === 'upcoming' ? t('Upcoming ({n})', { n: upcoming.length }) : t('Past ({n})', { n: past.length })}
           </button>
         ))}
       </div>
@@ -47,21 +48,22 @@ export function Orders() {
       {list.length === 0 ? (
         <EmptyState
           icon={<Receipt className="h-9 w-9" />}
-          title={tab === 'upcoming' ? 'No upcoming orders' : 'No past orders yet'}
+          title={tab === 'upcoming' ? t('No upcoming orders') : t('No past orders yet')}
           text={
             tab === 'upcoming'
-              ? 'Reserve a surprise bag and it will show up here with your pickup details.'
-              : 'Orders you’ve collected or cancelled will show up here.'
+              ? t('Reserve a surprise bag and it will show up here with your pickup details.')
+              : t('Orders you’ve collected or cancelled will show up here.')
           }
-          action={<Button onClick={() => navigate('/')}>Find a bag</Button>}
+          action={<Button onClick={() => navigate('/')}>{t('Find a bag')}</Button>}
         />
       ) : (
         <ul className="space-y-3 p-4">
           {list.map((o) => {
             const store = stores.find((s) => s.id === o.storeId)
             if (!store) return null
-            const missed = o.status === 'reserved' && o.pickupEnd < now
-            const live = o.status === 'reserved' && isPickupNow(o.pickupStart, o.pickupEnd, now)
+            const unpaid = o.status === 'reserved' && o.paymentStatus === 'pending'
+            const missed = o.status === 'reserved' && !unpaid && o.pickupEnd < now
+            const live = o.status === 'reserved' && !unpaid && isPickupNow(o.pickupStart, o.pickupEnd, now)
             return (
               <li key={o.id}>
                 <Link to={`/orders/${o.id}`} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-line">
@@ -75,7 +77,7 @@ export function Orders() {
                     <div className="mt-1.5 flex items-center gap-2">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          live
+                          live || unpaid
                             ? 'bg-sun text-ink'
                             : missed || o.status === 'cancelled'
                               ? 'bg-line text-muted'
@@ -84,11 +86,11 @@ export function Orders() {
                                 : 'bg-brand text-white'
                         }`}
                       >
-                        {live ? 'Ready to collect' : missed ? 'Missed' : STATUS_LABEL[o.status]}
+                        {unpaid ? t('Payment not finished') : live ? t('Ready to collect') : missed ? t('Missed') : o.paymentStatus === 'failed' ? t('Not paid') : t(STATUS_LABEL[o.status])}
                       </span>
                       {o.status === 'collected' && !o.rating && (
                         <span className="flex items-center gap-1 text-xs font-semibold text-brand">
-                          <Star className="h-3.5 w-3.5" /> Rate your bag
+                          <Star className="h-3.5 w-3.5" /> {t('Rate your bag')}
                         </span>
                       )}
                     </div>

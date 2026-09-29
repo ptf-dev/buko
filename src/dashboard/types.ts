@@ -10,6 +10,9 @@ export interface SessionUser {
   role: Role
   storeId: string | null
   storeStatus: StoreStatus | null
+  twoFactor?: { enabled: boolean; required: boolean }
+  /** 'finance': payouts, refunds, billing and money reports. */
+  permissions?: string[]
 }
 
 /** A store as its partner or an admin sees it: real stock, status and contact details. */
@@ -73,4 +76,6 @@ export interface AdminMember {
   email: string
   createdAt: string
   lastLoginAt: string | null
+  finance?: boolean
+  twoFactor?: boolean
 }

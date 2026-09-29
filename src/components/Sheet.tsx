@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { t } from '../i18n'
 
 /** Bottom sheet modal, the primary overlay pattern in the app. */
 export function Sheet({
@@ -32,7 +33,7 @@ export function Sheet({
         {title && (
           <div className="flex items-center justify-between px-5 pt-3 pb-2">
             <h2 className="text-lg font-bold">{title}</h2>
-            <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 hover:bg-line">
+            <button type="button" onClick={onClose} aria-label={t('Close')} className="rounded-full p-1.5 hover:bg-line">
               <X className="h-5 w-5" />
             </button>
           </div>

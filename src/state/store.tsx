@@ -1,8 +1,10 @@
 import { DEMO_MODE } from '../config'
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState, type Dispatch, type ReactNode } from 'react'
-import { ApiError, customerApi, customerToken, type CustomerAccount } from '../lib/api'
+import { ApiError, customerApi, customerToken, type CustomerAccount, type PaymentInfo } from '../lib/api'
 import type { Order, PaymentMethod } from '../types'
 import { initialState, randomId, randomPickupCode, reducer, STATE_VERSION, type Action, type AppState } from './reducer'
+import { t } from '../i18n'
+import { track } from '../lib/telemetry'
 
 const STORAGE_KEY = 'buko:state'
 
@@ -22,7 +24,7 @@ function load(): AppState {
 const StateContext = createContext<AppState | null>(null)
 const DispatchContext = createContext<Dispatch<Action> | null>(null)
 
-const OFFLINE = 'You’re offline. Connect to the internet and try again.'
+const OFFLINE = () => t('You’re offline. Connect to the internet and try again.')
 
 interface Sync {
   /** True once the server answered: stock and orders are live and shared. */
@@ -43,6 +45,8 @@ interface Account {
   logout: () => Promise<void>
   rename: (name: string) => Promise<void>
   deleteAccount: () => Promise<void>
+  /** Re-reads the account (e.g. after the email link was opened). */
+  reload: () => Promise<void>
 }
 const AccountContext = createContext<Account | null>(null)
 
@@ -59,7 +63,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const [stores, orders] = await Promise.all([customerApi.stores(), customerApi.orders()])
       if (!Array.isArray(stores) || !Array.isArray(orders)) throw new Error('No API')
       dispatch({ type: 'hydrateStores', stores })
-      dispatch({ type: 'upsertOrders', orders })
+      dispatch({ type: 'syncOrders', orders })
       setLive(true)
     } catch {
       // No backend reachable: keep the last data we had (demo data in development). Actions refuse in production.
@@ -91,7 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     customerApi
       .me()
       .then((user) => {
-        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email })
+        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified, language: user.language })
         else customerToken.set(null)
       })
       .catch((e) => {
@@ -120,10 +124,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ready,
       async signup(name, email, password) {
         const r = await customerApi.signup(name, email, password)
+        track('signup')
         signedIn(r.user, r.token)
       },
       async login(email, password) {
         const r = await customerApi.login(email, password)
+        track('login')
         signedIn(r.user, r.token)
       },
       async logout() {
@@ -138,6 +144,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       async deleteAccount() {
         await customerApi.deleteAccount()
         signedOut()
+      },
+      async reload() {
+        const user = await customerApi.me().catch(() => null)
+        if (user && user.role === 'customer') setAccount({ id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified, language: user.language })
       },
     }
   }, [account, ready, refresh])
@@ -203,35 +213,46 @@ export function useOrderActions() {
   return useMemo(() => {
     const save = (order: Order) => dispatch({ type: 'upsertOrders', orders: [order] })
     return {
-      async reserve(storeId: string, quantity: number, paymentMethod: PaymentMethod): Promise<string> {
+      /** Places the order. For card payments with POK it comes back unpaid, with the form to show in payment. */
+      async reserve(storeId: string, quantity: number, paymentMethod: PaymentMethod): Promise<{ orderId: string; payment: PaymentInfo | null }> {
         if (!live) {
-          if (!DEMO_MODE) throw new Error(OFFLINE)
+          if (!DEMO_MODE) throw new Error(OFFLINE())
           const orderId = randomId()
           dispatch({ type: 'reserve', storeId, quantity, paymentMethod, now: Date.now(), orderId, pickupCode: randomPickupCode() })
-          return orderId
+          return { orderId, payment: null }
         }
         try {
-          const order = await customerApi.reserve(storeId, quantity, paymentMethod)
+          const { order, payment } = await customerApi.reserve(storeId, quantity, paymentMethod)
           save(order)
-          return order.id
+          return { orderId: order.id, payment: order.paymentStatus === 'pending' && payment?.sdkOrderId ? payment : null }
         } finally {
           refresh()
         }
       },
+      /** After the payment form reports success (or to resume paying): the server checks with the provider. */
+      async verifyPayment(orderId: string): Promise<{ paid: boolean; payment: PaymentInfo | null }> {
+        if (!live) throw new Error(OFFLINE())
+        const { order, payment } = await customerApi.verifyPayment(orderId)
+        save(order)
+        refresh()
+        return { paid: order.status === 'reserved' && order.paymentStatus !== 'pending', payment: payment ?? null }
+      },
       async cancel(orderId: string) {
         if (!live) {
-          if (!DEMO_MODE) throw new Error(OFFLINE)
+          if (!DEMO_MODE) throw new Error(OFFLINE())
           return dispatch({ type: 'cancelOrder', orderId })
         }
         save(await customerApi.cancel(orderId))
+        track('order_cancelled')
         refresh()
       },
       async collect(orderId: string) {
         if (!live) {
-          if (!DEMO_MODE) throw new Error(OFFLINE)
+          if (!DEMO_MODE) throw new Error(OFFLINE())
           return dispatch({ type: 'collectOrder', orderId, now: Date.now() })
         }
         save(await customerApi.collect(orderId))
+        track('order_collected')
       },
       /** Report a problem with a collected bag. Needs the server: support decides refunds. */
       async complain(orderId: string, reason: string, details: string) {
@@ -240,7 +261,7 @@ export function useOrderActions() {
       },
       async rate(orderId: string, rating: number, tags: string[]) {
         if (!live) {
-          if (!DEMO_MODE) throw new Error(OFFLINE)
+          if (!DEMO_MODE) throw new Error(OFFLINE())
           return dispatch({ type: 'rateOrder', orderId, rating, tags })
         }
         save(await customerApi.rate(orderId, rating, tags))

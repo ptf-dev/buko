@@ -12,6 +12,7 @@ import { CATEGORIES } from '../data/categories'
 import { activeFilterCount, DEFAULT_FILTERS } from '../lib/search'
 import { useAppState, useDispatch, useNow } from '../state/store'
 import { useFilteredListings, useListings } from '../state/useListings'
+import { placeLabel, t, tn } from '../i18n'
 
 /** Height of the floating search + filter chips over the map. */
 const OVERLAY = 132
@@ -65,8 +66,8 @@ export function Browse() {
   }, [])
 
   const categoryLabel =
-    filters.categories.length === 1 ? CATEGORIES[filters.categories[0]!].label : filters.categories.length > 1 ? `${filters.categories.length} categories` : 'Category'
-  const dayLabel = filters.day === 'today' ? 'Today' : filters.day === 'tomorrow' ? 'Tomorrow' : 'Pickup day'
+    filters.categories.length === 1 ? t(CATEGORIES[filters.categories[0]!].label) : filters.categories.length > 1 ? t('{n} categories', { n: filters.categories.length }) : t('Category')
+  const dayLabel = filters.day === 'today' ? t('Today') : filters.day === 'tomorrow' ? t('Tomorrow') : t('Pickup day')
 
   return (
     <div className="relative h-full overflow-hidden bg-[#e9eeed]">
@@ -93,12 +94,12 @@ export function Browse() {
               value={filters.query}
               onChange={(e) => setFilters({ query: e.target.value })}
               onFocus={() => setSnap('full')}
-              placeholder="Search"
-              aria-label="Search stores and food"
+              placeholder={t('Search')}
+              aria-label={t('Search stores and food')}
               className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted"
             />
             {filters.query && (
-              <button type="button" aria-label="Clear search" onClick={() => setFilters({ query: '' })}>
+              <button type="button" aria-label={t('Clear search')} onClick={() => setFilters({ query: '' })}>
                 <X className="h-4 w-4 text-muted" />
               </button>
             )}
@@ -106,7 +107,7 @@ export function Browse() {
           <button
             type="button"
             onClick={() => setLocationOpen(true)}
-            aria-label={`Location: ${location.label}. Change`}
+            aria-label={t('Location: {place}. Change', { place: placeLabel(location.label) })}
             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.14)]"
           >
             <MapPin className="h-5 w-5 text-ink" />
@@ -116,7 +117,7 @@ export function Browse() {
           <button
             type="button"
             onClick={() => setFiltersOpen(true)}
-            aria-label={`Filters${filterCount ? `, ${filterCount} on` : ''}`}
+            aria-label={filterCount ? t('Filters, {n} on', { n: filterCount }) : t('Filters')}
             className="relative flex h-10 w-11 shrink-0 items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
           >
             <SlidersHorizontal className="h-5 w-5" />
@@ -133,10 +134,10 @@ export function Browse() {
             {dayLabel} <ChevronDown className="h-4 w-4" aria-hidden />
           </ChipButton>
           <ChipButton active={!!filters.availableNow} pressed={!!filters.availableNow} onClick={() => setFilters({ availableNow: !filters.availableNow })}>
-            Available now
+            {t('Available now')}
           </ChipButton>
           <ChipButton active={filters.hideSoldOut} pressed={filters.hideSoldOut} onClick={() => setFilters({ hideSoldOut: !filters.hideSoldOut })}>
-            Hide sold out
+            {t('Hide sold-out')}
           </ChipButton>
         </div>
       </div>
@@ -145,7 +146,7 @@ export function Browse() {
       {!selected && snap !== 'full' && (
         <button
           type="button"
-          aria-label="Back to my location"
+          aria-label={t('Back to my location')}
           onClick={() => mapApi.current?.recenter(location.lat, location.lng)}
           className="absolute right-4 z-[600] flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.16)] transition-[bottom] duration-300"
           style={{ bottom: snap === 'half' ? 'calc(44% + 12px)' : `${PEEK + 12}px` }}
@@ -166,13 +167,13 @@ export function Browse() {
               }}
               className="flex h-11 items-center gap-2 rounded-full bg-brand px-5 font-semibold text-white shadow-[0_4px_14px_rgba(0,97,95,0.35)]"
             >
-              <List className="h-5 w-5" aria-hidden /> List
+              <List className="h-5 w-5" aria-hidden /> {t('List')}
             </button>
           </div>
           <div className="relative">
             <button
               type="button"
-              aria-label="Close preview"
+              aria-label={t('Close preview')}
               onClick={() => setSelectedId(null)}
               className="absolute -top-2 -left-1 z-10 rounded-full bg-white p-1.5 shadow"
             >
@@ -187,11 +188,11 @@ export function Browse() {
           {results.length === 0 ? (
             <EmptyState
               icon={<Search className="h-9 w-9" />}
-              title="No results"
-              text="Try another search, fewer filters or a larger distance."
+              title={t('No results')}
+              text={t('Try another search, fewer filters or a larger distance.')}
               action={
                 <Button variant="secondary" onClick={() => dispatch({ type: 'setFilters', filters: { ...DEFAULT_FILTERS, sortBy: filters.sortBy } })}>
-                  Clear filters
+                  {t('Clear filters')}
                 </Button>
               }
             />
@@ -277,7 +278,7 @@ function ListSheet({ snap, onSnap, count, children }: { snap: Snap; onSnap: (s: 
       <div
         role="button"
         tabIndex={0}
-        aria-label={snap === 'full' ? 'Show map' : 'Show list'}
+        aria-label={snap === 'full' ? t('Show map') : t('Show list')}
         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSnap(snap === 'full' ? 'peek' : 'full')}
         onPointerDown={down}
         onPointerMove={move}
@@ -287,7 +288,7 @@ function ListSheet({ snap, onSnap, count, children }: { snap: Snap; onSnap: (s: 
       >
         <div className="mx-auto h-1.5 w-12 rounded-full bg-line" />
         <h2 className="mt-3 text-center text-[22px] font-bold tracking-tight text-ink">
-          {count} Surprise {count === 1 ? 'Bag' : 'Bags'}
+          {tn(count, '{n} Surprise Bag', '{n} Surprise Bags')}
         </h2>
       </div>
       <div className={`min-h-0 flex-1 px-4 ${snap === 'full' && !drag ? 'overflow-y-auto' : 'overflow-hidden'}`}>{children}</div>

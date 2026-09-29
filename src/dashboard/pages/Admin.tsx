@@ -9,6 +9,7 @@ import type { Category } from '../../types'
 import { useNow } from '../../state/store'
 import { PhotoUpload } from '../PhotoUpload'
 import { StoreMoneyPanel } from './Finance'
+import { SecurityPanel } from './Security'
 import { BarChart, shortDay } from '../BarChart'
 import { useAuth, useResource, useToast } from '../data'
 import type { AdminMember, AdminOverview, AdminStoreDetail, DashOrder, ManagedStore, StoreStatus } from '../types'
@@ -26,8 +27,10 @@ import {
   PageSkeleton,
   PageTitle,
   Panel,
+  Pill,
   Segmented,
   StatusBadge,
+  Switch,
   type Column,
 } from '../ui'
 import { BagEditor, StoreProfileForm } from './Partner'
@@ -301,7 +304,9 @@ export function AdminPartnerDetail() {
   const { data, error, loading, reload, setData } = useResource<AdminStoreDetail>(`admin/stores/${id}`)
   const toast = useToast()
   const [params] = useSearchParams()
-  const [tab, setTab] = useState<'performance' | 'money' | 'listing' | 'profile'>(params.get('tab') === 'money' ? 'money' : 'performance')
+  const { user: me } = useAuth()
+  const canSeeMoney = !!me?.permissions?.includes('finance')
+  const [tab, setTab] = useState<'performance' | 'money' | 'listing' | 'profile'>(params.get('tab') === 'money' && canSeeMoney ? 'money' : 'performance')
   const now = useNow(30_000)
 
   if (loading) return <PageSkeleton />
@@ -397,7 +402,7 @@ export function AdminPartnerDetail() {
           onChange={setTab}
           options={[
             { value: 'performance', label: 'Performance' },
-            { value: 'money', label: 'Money' },
+            ...(canSeeMoney ? [{ value: 'money' as const, label: 'Money' }] : []),
             { value: 'listing', label: 'Surprise Bag' },
             { value: 'profile', label: 'Profile & contact' },
           ]}
@@ -457,7 +462,7 @@ export function AdminPartnerDetail() {
         </>
       )}
 
-      {tab === 'money' && <StoreMoneyPanel storeId={store.id} />}
+      {tab === 'money' && canSeeMoney && <StoreMoneyPanel storeId={store.id} />}
 
       {tab === 'listing' && <BagEditor store={store} save={(bag) => patch({ bag })} onSaved={(s) => setData({ ...data, store: s })} />}
       {tab === 'profile' && (
@@ -717,10 +722,20 @@ export function AdminTeam() {
   const { user } = useAuth()
   const { data, error, loading, reload } = useResource<{ admins: AdminMember[] }>('admin/team')
   const toast = useToast()
-  const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', finance: false })
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [demoBusy, setDemoBusy] = useState(false)
+  const iHaveFinance = !!user?.permissions?.includes('finance')
+  const setFinance = async (a: AdminMember, finance: boolean) => {
+    try {
+      await api(`admin/team/${a.id}`, { method: 'PATCH', json: { finance } })
+      toast(finance ? `${a.name} can now see finance` : `${a.name} no longer sees finance`)
+      reload()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not change access.', 'error')
+    }
+  }
 
   const add = async (e: FormEvent) => {
     e.preventDefault()
@@ -729,7 +744,7 @@ export function AdminTeam() {
     try {
       await api('admin/team', { method: 'POST', json: form })
       toast(`${form.name} can now log in`)
-      setForm({ name: '', email: '', password: '' })
+      setForm({ name: '', email: '', password: '', finance: false })
       reload()
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not add the admin.')
@@ -754,7 +769,7 @@ export function AdminTeam() {
 
   return (
     <>
-      <PageTitle title="Team & settings" subtitle="Everyone on the Ngopu team has the same full access." />
+      <PageTitle title="Team & settings" subtitle="Admins manage stores and orders. Money (payouts, refunds, billing) needs the finance permission. Every admin logs in with two-factor." />
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="Admins">
           {loading ? (
@@ -773,7 +788,26 @@ export function AdminTeam() {
                     <p className="text-xs text-muted">
                       Last login: {a.lastLoginAt ? new Date(a.lastLoginAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'never'}
                     </p>
+                    <p className="mt-1 flex flex-wrap gap-1.5">
+                      <Pill tone={a.finance ? 'good' : 'neutral'}>{a.finance ? 'Finance' : 'No finance'}</Pill>
+                      <Pill tone={a.twoFactor ? 'good' : 'warn'}>{a.twoFactor ? '2FA on' : '2FA not set up'}</Pill>
+                    </p>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                  {iHaveFinance && a.id !== user?.id && (
+                    <Switch checked={!!a.finance} onChange={(v) => setFinance(a, v)} label={`Finance access for ${a.name}`} />
+                  )}
+                  {a.id !== user?.id && a.twoFactor && (
+                    <ConfirmBtn
+                      label="Reset 2FA"
+                      confirmLabel="Reset their two-factor login"
+                      onConfirm={async () => {
+                        await api(`admin/users/${a.id}/2fa-reset`, { method: 'POST', json: {} })
+                        toast(`${a.name} will set up two-factor again at next login`)
+                        reload()
+                      }}
+                    />
+                  )}
                   {a.id !== user?.id && (
                     <ConfirmBtn
                       label="Remove"
@@ -785,6 +819,7 @@ export function AdminTeam() {
                       }}
                     />
                   )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -802,11 +837,21 @@ export function AdminTeam() {
             <Field label="Temporary password" hint="At least 8 characters. Share it with them securely.">
               {(id, hint) => <Input id={id} type="password" autoComplete="new-password" aria-describedby={hint} value={form.password} onChange={set('password')} />}
             </Field>
+            {iHaveFinance && (
+              <label className="flex items-center gap-2 text-[15px]">
+                <input type="checkbox" checked={form.finance} onChange={(e) => setForm({ ...form, finance: e.target.checked })} className="h-4 w-4 accent-[#00615f]" />
+                Can see finance (payouts, refunds, billing)
+              </label>
+            )}
             <Btn type="submit" loading={busy} disabled={!form.name || !form.email || form.password.length < 8} className="w-full">
               <UserPlus className="h-4 w-4" /> Add admin
             </Btn>
           </form>
         </Panel>
+      </div>
+
+      <div className="mt-5">
+        <SecurityPanel />
       </div>
 
       <Panel className="mt-5" title="Sample data">

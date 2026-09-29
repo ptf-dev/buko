@@ -1,5 +1,6 @@
 import { Heart } from 'lucide-react'
 import { useAppState, useDispatch } from '../state/store'
+import { t } from '../i18n'
 
 /** Heart toggle. `plain` is the bare icon used inside cards; the default is a round button for photos. */
 export function FavouriteButton({ storeId, className = '', plain = false }: { storeId: string; className?: string; plain?: boolean }) {
@@ -9,7 +10,7 @@ export function FavouriteButton({ storeId, className = '', plain = false }: { st
   return (
     <button
       type="button"
-      aria-label={active ? 'Remove from favourites' : 'Add to favourites'}
+      aria-label={active ? t('Remove from favourites') : t('Add to favourites')}
       aria-pressed={active}
       onClick={(e) => {
         e.preventDefault()

@@ -9,6 +9,7 @@ import { discountPercent, formatMinutes, formatPrice, formatRange, isPickupNow }
 import type { Category, Diet } from '../../types'
 import { useNow } from '../../state/store'
 import { BarChart, shortDay } from '../BarChart'
+import { SecurityPanel } from './Security'
 import { PhotoUpload } from '../PhotoUpload'
 import { useResource, useToast } from '../data'
 import type { DashOrder, ManagedStore, PartnerOverview } from '../types'
@@ -791,6 +792,9 @@ export function PartnerStore() {
           </p>
         }
       />
+      <div className="mt-5">
+        <SecurityPanel />
+      </div>
     </>
   )
 }

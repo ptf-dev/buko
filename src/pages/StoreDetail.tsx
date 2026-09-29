@@ -11,7 +11,7 @@ import {
   Star,
   ThumbsUp,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { BagArt, StoreLogo } from '../components/BagArt'
 import { QuantityPill } from '../components/BagCard'
@@ -26,6 +26,8 @@ import { publicUrl, shareContent } from '../lib/native'
 import { useAppState, useNow } from '../state/store'
 import { useListings } from '../state/useListings'
 import { CheckoutSheet } from './CheckoutSheet'
+import { placeLabel, t } from '../i18n'
+import { track } from '../lib/telemetry'
 
 export function StoreDetail() {
   const { id } = useParams()
@@ -37,14 +39,17 @@ export function StoreDetail() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [shared, setShared] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
+  useEffect(() => {
+    if (id) track('store_view', { store: id })
+  }, [id])
 
   if (!listing) {
     return (
       <EmptyState
         icon={<ShoppingBag className="h-9 w-9" />}
-        title="Store not found"
-        text="This store may no longer be on Ngopu."
-        action={<Button onClick={() => navigate('/')}>Back to Discover</Button>}
+        title={t('Store not found')}
+        text={t('This store may no longer be on Ngopu.')}
+        action={<Button onClick={() => navigate('/')}>{t('Back to Discover')}</Button>}
       />
     )
   }
@@ -67,7 +72,7 @@ export function StoreDetail() {
   const share = async () => {
     const result = await shareContent({
       title: store.name,
-      text: `${bag.title} at ${store.name} on Ngopu`,
+      text: t('{bag} at {store} on Ngopu', { bag: bag.title, store: store.name }),
       url: publicUrl(`/store/${store.id}`),
     })
     if (result === 'copied') {
@@ -83,7 +88,7 @@ export function StoreDetail() {
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3">
           <button
             type="button"
-            aria-label="Back"
+            aria-label={t('Back')}
             onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow"
           >
@@ -92,7 +97,7 @@ export function StoreDetail() {
           <div className="flex gap-2">
             <button
               type="button"
-              aria-label="Share"
+              aria-label={t('Share')}
               onClick={share}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow"
             >
@@ -102,7 +107,7 @@ export function StoreDetail() {
           </div>
         </div>
         {shared && (
-          <p className="animate-fade-in absolute top-14 right-3 rounded-full bg-ink px-3 py-1 text-xs text-white">Link copied</p>
+          <p className="animate-fade-in absolute top-14 right-3 rounded-full bg-ink px-3 py-1 text-xs text-white">{t('Link copied')}</p>
         )}
         <div className="absolute bottom-3 left-4 flex items-center gap-3">
           <StoreLogo store={store} size={52} />
@@ -120,8 +125,8 @@ export function StoreDetail() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="flex items-center gap-1.5 text-sm text-muted">
-              <meta.icon className="h-4 w-4" /> {meta.label}
-              {bag.diet && <span className="rounded-full bg-brand-light px-2 py-0.5 text-xs font-semibold text-brand">{DIET_LABELS[bag.diet]}</span>}
+              <meta.icon className="h-4 w-4" /> {t(meta.label)}
+              {bag.diet && <span className="rounded-full bg-brand-light px-2 py-0.5 text-xs font-semibold text-brand">{t(DIET_LABELS[bag.diet])}</span>}
             </p>
             <h2 className="mt-1 text-lg font-bold">{bag.title}</h2>
             <p className="mt-1 flex items-center gap-1 text-sm">
@@ -139,9 +144,9 @@ export function StoreDetail() {
         <div className="mt-4 flex items-center gap-3 rounded-xl bg-cream p-3">
           <Clock className="h-5 w-5 shrink-0 text-brand" />
           <div className="text-sm">
-            <p className="font-semibold">Pick up: {formatRange(start, end, now)}</p>
+            <p className="font-semibold">{t('Pick up: {when}', { when: formatRange(start, end, now) })}</p>
             <p className="text-muted">
-              {isPickupNow(start, end, now) ? 'Pickup window is open now' : `Opens in ${timeUntil(start, now)}`}
+              {isPickupNow(start, end, now) ? t('Pickup window is open now') : t('Opens in {time}', { time: timeUntil(start, now) })}
             </p>
           </div>
         </div>
@@ -152,14 +157,14 @@ export function StoreDetail() {
           <MapPin className="h-5 w-5 shrink-0 text-brand" />
           <div className="flex-1 text-sm">
             <p className="font-semibold">{store.address}</p>
-            <p className="text-muted">{formatDistance(distance)} from {location.label}</p>
+            <p className="text-muted">{t('{distance} from {place}', { distance: formatDistance(distance), place: placeLabel(location.label) })}</p>
           </div>
           <Navigation className="h-5 w-5 text-brand" />
         </a>
         <button
           type="button"
           onClick={() => setMapOpen(true)}
-          aria-label={`Open map of ${store.name}`}
+          aria-label={t('Open map of {store}', { store: store.name })}
           className="relative mt-3 block h-44 w-full overflow-hidden rounded-xl ring-1 ring-line"
         >
           <MapView
@@ -172,33 +177,32 @@ export function StoreDetail() {
             className="pointer-events-none h-full w-full"
           />
           <span className="absolute right-2.5 bottom-2.5 z-[500] flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow">
-            <Maximize2 className="h-3.5 w-3.5" /> Open map
+            <Maximize2 className="h-3.5 w-3.5" /> {t('Open map')}
           </span>
         </button>
       </section>
 
       <section className="mt-2 bg-white px-4 py-4">
-        <h3 className="font-bold">What you could get</h3>
+        <h3 className="font-bold">{t('What you could get')}</h3>
         <p className="mt-1 text-sm leading-relaxed text-ink/80">{bag.description}</p>
         <p className="mt-2 text-sm text-muted">
-          It’s a surprise! Stores can’t predict exactly what will be left at the end of the day, so the contents of
-          your bag will vary.
+          {t('It’s a surprise! Stores can’t predict exactly what will be left at the end of the day, so the contents of your bag will vary.')}
         </p>
         <div className="mt-4 flex gap-3 rounded-xl bg-amber-50 p-3 text-sm">
           <CircleAlert className="h-5 w-5 shrink-0 text-amber-600" />
           <p>
-            <span className="font-semibold">Ingredients & allergens. </span>
+            <span className="font-semibold">{t('Ingredients & allergens.')} </span>
             {bag.allergensNote}
           </p>
         </div>
       </section>
 
       <section className="mt-2 bg-white px-4 py-4">
-        <h3 className="font-bold">What other people are saying</h3>
+        <h3 className="font-bold">{t('What other people are saying')}</h3>
         <div className="mt-3 flex flex-wrap gap-2">
           {store.highlights.map((h) => (
             <span key={h} className="flex items-center gap-1.5 rounded-full bg-brand-light px-3 py-1.5 text-sm font-medium text-brand">
-              <ThumbsUp className="h-4 w-4" /> {h}
+              <ThumbsUp className="h-4 w-4" /> {t(h)}
             </span>
           ))}
         </div>
@@ -222,8 +226,7 @@ export function StoreDetail() {
       <section className="mt-2 flex items-center gap-3 bg-white px-4 py-4 text-sm">
         <Leaf className="h-8 w-8 shrink-0 text-brand" />
         <p>
-          Every bag you rescue saves around <span className="font-semibold">2.7 kg of CO₂e</span> — the same as charging
-          a smartphone 340 times.
+          {t('Every bag you rescue saves around')} <span className="font-semibold">{t('2.7 kg of CO₂e')}</span> {t('— the same as charging a smartphone 340 times.')}
         </p>
       </section>
 
@@ -231,12 +234,12 @@ export function StoreDetail() {
         {activeOrder ? (
           <Link to={`/orders/${activeOrder.id}`} className="block">
             <Button variant="secondary" className="w-full">
-              View your order
+              {t('View your order')}
             </Button>
           </Link>
         ) : (
           <Button className="w-full" disabled={soldOut} onClick={() => setCheckoutOpen(true)}>
-            {soldOut ? 'Sold out' : 'Reserve'}
+            {soldOut ? t('Sold out') : t('Reserve')}
           </Button>
         )}
       </div>
@@ -248,7 +251,7 @@ export function StoreDetail() {
         footer={
           <a href={mapsUrl} target="_blank" rel="noreferrer" className="block">
             <Button className="w-full">
-              <Navigation className="h-5 w-5" /> Get directions · {formatDistance(distance)}
+              <Navigation className="h-5 w-5" /> {t('Get directions')} · {formatDistance(distance)}
             </Button>
           </a>
         }
@@ -269,7 +272,7 @@ export function StoreDetail() {
         </div>
         {meNearby && (
           <p className="mt-2 flex items-center gap-2 text-xs text-muted">
-            <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-[#2f7cf6] shadow" aria-hidden /> {location.label}
+            <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-[#2f7cf6] shadow" aria-hidden /> {placeLabel(location.label)}
           </p>
         )}
       </Sheet>

@@ -5,13 +5,14 @@ import type { Listing } from '../lib/search'
 import type { Store } from '../types'
 import { BagArt, StoreLogo } from './BagArt'
 import { FavouriteButton } from './FavouriteButton'
+import { t } from '../i18n'
 
 /** Status pill on the photo: sold out, new, only a few left, or popular. */
 export function QuantityPill({ quantity, isNew }: { quantity: number; isNew?: boolean }) {
-  if (quantity <= 0) return <span className="rounded-full bg-white/95 px-3 py-1 text-sm font-semibold text-muted shadow-sm">Sold out</span>
-  if (isNew) return <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-ink shadow-sm">New</span>
+  if (quantity <= 0) return <span className="rounded-full bg-white/95 px-3 py-1 text-sm font-semibold text-muted shadow-sm">{t('Sold out')}</span>
+  if (isNew) return <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-ink shadow-sm">{t('New')}</span>
   return (
-    <span className="rounded-full bg-[#fdf1c7] px-3 py-1 text-sm font-bold text-ink shadow-sm">{quantity > 5 ? '5+' : quantity} left</span>
+    <span className="rounded-full bg-[#fdf1c7] px-3 py-1 text-sm font-bold text-ink shadow-sm">{t('{n} left', { n: quantity > 5 ? '5+' : quantity })}</span>
   )
 }
 
@@ -19,7 +20,7 @@ export function QuantityPill({ quantity, isNew }: { quantity: number; isNew?: bo
 function CardBadge({ store }: { store: Store }) {
   const { quantity, isNew } = store.bag
   if (quantity <= 0 || isNew || quantity <= 3) return <QuantityPill quantity={quantity} isNew={isNew} />
-  if (store.rating >= 4.5 && store.ratingCount >= 50) return <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-ink shadow-sm">Popular</span>
+  if (store.rating >= 4.5 && store.ratingCount >= 50) return <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-ink shadow-sm">{t('Popular')}</span>
   return <QuantityPill quantity={quantity} />
 }
 
@@ -68,7 +69,7 @@ export function BagCard({ listing, now, wide = false }: { listing: Listing; now:
         </div>
         <p className="truncate text-[15px] text-ink/85">{bag.title}</p>
         <p className="mt-0.5 flex items-center gap-2 text-[15px] text-ink/85">
-          <span className="truncate">{soldOut ? 'Sold out for now' : `Collect ${formatRange(start, end, now)}`}</span>
+          <span className="truncate">{soldOut ? t('Sold out for now') : t('Collect {when}', { when: formatRange(start, end, now) })}</span>
           <span className="h-4 w-px shrink-0 bg-line" aria-hidden />
           <span className="shrink-0">{formatDistance(distance)}</span>
         </p>

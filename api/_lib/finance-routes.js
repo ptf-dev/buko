@@ -1,6 +1,7 @@
 // @ts-check
 /** HTTP endpoints for money: the partner Earnings page and the admin Finance pages. Logic lives in finance.js. */
-import { requireUser } from './auth.js'
+import { requireFinance, requireUser } from './auth.js'
+import { notifyStoreCancelled, sendDueReminders } from './notify.js'
 import { HttpError, query } from './db.js'
 import {
   addAdjustment,
@@ -32,7 +33,7 @@ import {
   updateSettings,
   updateTerms,
 } from './finance.js'
-import { expirePendingPayments, handleWebhook, processRefunds, reconcile } from './payments/service.js'
+import { expirePendingPayments, handleWebhook, markRefundDone, processRefunds, reconcile } from './payments/service.js'
 import { iban, int, lekToQ, nipt, num, oneOf, optStr, str } from './validate.js'
 
 /**
@@ -207,6 +208,7 @@ async function partnerCancelOrder({ req, params, body }) {
   const user = await requireUser(req, 'partner')
   const reason = str(body.reason, 'Reason', { max: 300 })
   await storeCancelOrder(storeOf(user), params.id, reason, user.id)
+  await notifyStoreCancelled(params.id)
   await processRefunds()
   return { body: { ok: true } }
 }
@@ -263,7 +265,7 @@ async function ledgerCsv(month, storeId) {
 
 /** @type {Handler} */
 async function adminFinance({ req, url }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const days = int(url.searchParams.get('days') ?? '30', 'Days', 7, 365)
   await settleNoShows()
   const r = lastDays(days)
@@ -279,6 +281,7 @@ async function adminFinance({ req, url }) {
              (select count(*)::int from payouts where status = 'approved') as approved_payouts,
              (select count(*)::int from store_billing b join stores s on s.id = b.store_id where s.status = 'active' and b.iban is null) as missing_bank,
              (select count(*)::int from refunds where status = 'failed') as failed_refunds,
+             (select count(*)::int from refunds where status = 'manual') as manual_refunds,
              (select count(*)::int from disputes where status = 'open') as open_disputes,
              (select count(*)::int from payment_requests where status = 'open') as open_requests,
              (select count(*)::int from payment_requests where status = 'open' and due_at < now()) as overdue_requests`),
@@ -305,7 +308,7 @@ async function adminFinance({ req, url }) {
 
 /** @type {Handler} */
 async function adminPayouts({ req }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const { rows } = await query(
     `select p.*, s.name as store_name, s.branch,
             (select count(*)::int from ledger_entries l where l.payout_id = p.id and l.type <> 'payout') as items
@@ -316,14 +319,14 @@ async function adminPayouts({ req }) {
 
 /** @type {Handler} */
 async function adminBuildRun({ req }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   return { status: 201, body: await buildPayoutRun(user.id) }
 }
 
 /** @param {'approve' | 'paid' | 'cancel'} action @returns {Handler} */
 const payoutAction = (action) =>
   async function ({ req, params, body }) {
-    const user = await requireUser(req, 'admin')
+    const user = await requireFinance(req)
     const ref = action === 'paid' ? str(body.reference, 'Bank reference', { max: 80 }) : null
     await updatePayout(params.id, action, user.id, ref)
     return { body: { ok: true } }
@@ -331,7 +334,7 @@ const payoutAction = (action) =>
 
 /** Approves every draft in a run at once. @type {Handler} */
 async function adminApproveRun({ req, params }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   const { rows } = await query(`select id from payouts where run_id = $1 and status = 'draft'`, [params.id])
   for (const r of rows) await updatePayout(r.id, 'approve', user.id)
   return { body: { approved: rows.length } }
@@ -343,7 +346,7 @@ async function adminApproveRun({ req, params }) {
  * @type {Handler}
  */
 async function adminBankFile({ req, params }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const { rows } = await query(
     `select p.*, s.name as store_name from payouts p join stores s on s.id = p.store_id where p.run_id = $1 and p.status = 'approved' order by s.name`,
     [params.id],
@@ -360,7 +363,7 @@ async function adminBankFile({ req, params }) {
 
 /** @type {Handler} */
 async function adminPayoutStatement({ req, params, url }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const st = await payoutStatement(params.id)
   if (url.searchParams.get('format') === 'csv') return download(`ngopu-payout-${params.id}.csv`, statementCsv(st))
   return { body: { payout: payoutView(st.payout), lines: st.lines } }
@@ -368,7 +371,7 @@ async function adminPayoutStatement({ req, params, url }) {
 
 /** @type {Handler} */
 async function adminComplaints({ req, url }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const status = url.searchParams.get('status')
   const { rows } = await query(
     `${COMPLAINT_SELECT} where ($1::text is null or k.status = $1) order by (k.status = 'open') desc, k.created_at desc limit 300`,
@@ -379,7 +382,7 @@ async function adminComplaints({ req, url }) {
 
 /** @type {Handler} */
 async function adminResolveComplaint({ req, params, body }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   const action = oneOf(body.action, 'Action', /** @type {const} */ (['refund', 'reject']))
   const note = optStr(body.note, 'Note', { max: 500 })
   if (action === 'reject') {
@@ -399,7 +402,7 @@ async function adminResolveComplaint({ req, params, body }) {
 
 /** Every store's money terms and bank details, for the admin. @type {Handler} */
 async function adminBilling({ req }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const s = await getSettings()
   const { rows } = await query(
     `select s.id, s.name, s.branch, s.status, b.* from stores s left join store_billing b on b.store_id = s.id
@@ -420,14 +423,14 @@ async function adminBilling({ req }) {
 
 /** @type {Handler} */
 async function adminReviewBank({ req, params, body }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   await reviewBankDetails(params.id, oneOf(body.action, 'Action', /** @type {const} */ (['approve', 'reject'])), user.id)
   return { body: { ok: true } }
 }
 
 /** @type {Handler} */
 async function adminUpdateTerms({ req, params, body }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   /** @type {Record<string, unknown>} */
   const u = {}
   if (body.commissionPercent !== undefined) u.commission_bps = body.commissionPercent === null ? null : Math.round(num(body.commissionPercent, 'Commission', 0, 100) * 100)
@@ -446,14 +449,14 @@ async function adminUpdateTerms({ req, params, body }) {
 
 /** @type {Handler} */
 async function adminAdjust({ req, params, body }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   await addAdjustment(params.id, lekToQ(body.amount, 'Amount', -1_000_000, 1_000_000), str(body.reason, 'Reason', { max: 300 }), user.id)
   return { status: 201, body: { ok: true } }
 }
 
 /** A store's balance and money lines, for the partner detail page. @type {Handler} */
 async function adminStoreMoney({ req, params }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   await settleNoShows()
   const s = await getSettings()
   const [bal, entries, billing, terms, payouts] = await Promise.all([
@@ -482,13 +485,13 @@ async function adminStoreMoney({ req, params }) {
 
 /** @type {Handler} */
 async function adminGetSettings({ req }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   return { body: { settings: await getSettings() } }
 }
 
 /** @type {Handler} */
 async function adminPatchSettings({ req, body }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   /** @type {Record<string, unknown>} */
   const p = {}
   if (body.vatRegistered !== undefined) p.vatRegistered = !!body.vatRegistered
@@ -522,7 +525,7 @@ async function adminPatchSettings({ req, body }) {
  * @type {Handler}
  */
 async function adminExport({ req, url }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const month = str(url.searchParams.get('month'), 'Month', { max: 7 })
   const type = oneOf(url.searchParams.get('type'), 'Export', /** @type {const} */ (['stores', 'ledger', 'payouts']))
   if (type === 'ledger') return download(`ngopu-ledger-${month}.csv`, await ledgerCsv(month, null))
@@ -593,7 +596,7 @@ async function adminExport({ req, url }) {
 
 /** @type {Handler} */
 async function adminAudit({ req }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const { rows } = await query(
     `select a.id::text, a.action, a.target, a.details, a.created_at as "createdAt", u.name as actor
        from audit_log a left join users u on u.id = a.actor_id order by a.created_at desc limit 200`,
@@ -621,14 +624,29 @@ async function dailyCron({ req }) {
   const to = new Date()
   const from = new Date(to.getTime() - DAY)
   const [expired, noShows, refunds] = [await expirePendingPayments(true), await settleNoShows(true), await processRefunds()]
+  const reminders = await sendDueReminders(true)
+  await query("delete from login_attempts where created_at < now() - interval '2 days'")
+  await query("delete from user_tokens where expires_at < now() - interval '2 days'")
   await settlePaymentRequests()
   const recon = await reconcile(from.toISOString(), to.toISOString())
-  return { body: { expired, noShows, refunds, reconciliation: recon } }
+  return { body: { expired, noShows, refunds, reminders, reconciliation: recon } }
+}
+
+/**
+ * Frequent housekeeping for an external scheduler (e.g. cron-job.org every 5 minutes, with the CRON_SECRET
+ * bearer): pickup reminders, unpaid holds and refunds on time even when the app is quiet. Protected like the
+ * daily job.
+ * @type {Handler}
+ */
+async function tickCron({ req }) {
+  const secret = process.env.CRON_SECRET
+  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) throw new HttpError(401, 'Unauthorized.')
+  return { body: { expired: await expirePendingPayments(true), reminders: await sendDueReminders(true), refunds: await processRefunds() } }
 }
 
 /** Payments, refunds and disputes for the admin (Finance → Payments). @type {Handler} */
 async function adminPayments({ req }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   await processRefunds()
   const [payments, refunds, disputes] = await Promise.all([
     query(
@@ -652,7 +670,7 @@ async function adminPayments({ req }) {
 
 /** @type {Handler} */
 async function adminRetryRefund({ req, params }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   const { rowCount } = await query(`update refunds set status = 'queued', updated_at = now() where id = $1 and status = 'failed'`, [params.id])
   if (!rowCount) throw new HttpError(409, 'Only failed refunds can be retried.')
   await query('insert into audit_log (actor_id, action, target) values ($1,$2,$3)', [user.id, 'refund.retry', params.id])
@@ -660,9 +678,17 @@ async function adminRetryRefund({ req, params }) {
   return { body: { ok: true } }
 }
 
+/** A refund the provider can't make by API (POK) was made by hand in its dashboard. @type {Handler} */
+async function adminRefundDone({ req, params, body }) {
+  const user = await requireFinance(req)
+  await markRefundDone(params.id, typeof body.reference === 'string' ? body.reference.slice(0, 120) : '')
+  await query('insert into audit_log (actor_id, action, target) values ($1,$2,$3)', [user.id, 'refund.manual', params.id])
+  return { body: { ok: true } }
+}
+
 /** @type {Handler} */
 async function adminReconcile({ req, body }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   const days = int(body.days ?? 7, 'Days', 1, 90)
   const to = new Date()
   return { body: await reconcile(new Date(to.getTime() - days * DAY).toISOString(), to.toISOString()) }
@@ -694,7 +720,7 @@ function requestView(r) {
 
 /** @type {Handler} */
 async function adminRequests({ req }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   await settlePaymentRequests()
   const { rows } = await query(
     `select r.*, s.name as store_name from payment_requests r join stores s on s.id = r.store_id order by (r.status = 'open') desc, r.created_at desc limit 300`,
@@ -704,13 +730,13 @@ async function adminRequests({ req }) {
 
 /** Creates requests for every store owing at least the minimum. @type {Handler} */
 async function adminRunRequests({ req }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   return { status: 201, body: { created: await createPaymentRequests(user.id) } }
 }
 
 /** @type {Handler} */
 async function adminStoreRequest({ req, params }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   const created = await createPaymentRequests(user.id, params.id)
   if (!created.length) throw new HttpError(409, 'This store doesn’t owe anything, or already has an open request.')
   return { status: 201, body: { request: created[0] } }
@@ -718,7 +744,7 @@ async function adminStoreRequest({ req, params }) {
 
 /** @type {Handler} */
 async function adminRequestPaid({ req, params, body }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   const amount = body.amount === undefined || body.amount === null || body.amount === '' ? null : lekToQ(body.amount, 'Amount', 1, 10_000_000)
   await markRequestPaid(params.id, amount, str(body.reference, 'Bank reference', { max: 80 }), user.id)
   return { body: { ok: true } }
@@ -726,7 +752,7 @@ async function adminRequestPaid({ req, params, body }) {
 
 /** @type {Handler} */
 async function adminRequestCancel({ req, params }) {
-  const user = await requireUser(req, 'admin')
+  const user = await requireFinance(req)
   await cancelPaymentRequest(params.id, user.id)
   return { body: { ok: true } }
 }
@@ -799,7 +825,7 @@ async function partnerRequestPage({ req, params }) {
 
 /** @type {Handler} */
 async function adminRequestPage({ req, params }) {
-  await requireUser(req, 'admin')
+  await requireFinance(req)
   return requestPage(params.id, null)
 }
 
@@ -807,8 +833,10 @@ async function adminRequestPage({ req, params }) {
 export const FINANCE_ROUTES = [
   ['POST', 'payments/webhook/:provider', providerWebhook],
   ['GET', 'cron/daily', dailyCron],
+  ['GET', 'cron/tick', tickCron],
   ['GET', 'admin/finance/payments', adminPayments],
   ['POST', 'admin/finance/refunds/:id/retry', adminRetryRefund],
+  ['POST', 'admin/finance/refunds/:id/done', adminRefundDone],
   ['POST', 'admin/finance/reconcile', adminReconcile],
   ['PATCH', 'partner/cash', partnerCash],
   ['GET', 'partner/payment-requests/:id', partnerRequestPage],

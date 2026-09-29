@@ -12,6 +12,7 @@ import { useAppState, useDispatch, useNow } from '../state/store'
 import { useListings } from '../state/useListings'
 import type { Category } from '../types'
 import { DEFAULT_FILTERS } from '../lib/search'
+import { t } from '../i18n'
 
 function Carousel({
   title,
@@ -28,10 +29,10 @@ function Carousel({
   return (
     <section className="mt-7">
       <div className="mb-3 flex items-baseline justify-between gap-3 px-4">
-        <h2 className="truncate text-[22px] leading-tight font-bold tracking-tight text-ink">{title}</h2>
+        <h2 className="truncate text-[22px] leading-tight font-bold tracking-tight text-ink">{t(title)}</h2>
         {onSeeAll && (
           <button type="button" onClick={onSeeAll} className="shrink-0 text-[15px] font-medium text-brand underline underline-offset-4">
-            See all
+            {t('See all')}
           </button>
         )}
       </div>
@@ -83,16 +84,16 @@ export function Discover() {
 
       <OutOfAreaNotice listings={all} className="mx-4 mt-4" />
 
-      <nav aria-label="Categories" className="no-scrollbar mt-4 flex gap-1 overflow-x-auto px-2">
-        {TILES.map((t) => (
+      <nav aria-label={t('Categories')} className="no-scrollbar mt-4 flex gap-1 overflow-x-auto px-2">
+        {TILES.map((tile) => (
           <button
-            key={t.key}
+            key={tile.key}
             type="button"
-            onClick={() => (t.key === 'now' ? browseWith({ availableNow: true, sortBy: 'distance' }) : browseWith({ categories: [t.key] }))}
+            onClick={() => (tile.key === 'now' ? browseWith({ availableNow: true, sortBy: 'distance' }) : browseWith({ categories: [tile.key] }))}
             className="flex w-[92px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-1 pt-1 pb-2 transition active:scale-95"
           >
-            <img src={t.image} alt="" className="h-[72px] w-[72px] object-contain drop-shadow-[0_6px_8px_rgba(0,0,0,0.12)]" />
-            <span className="text-center text-[14px] leading-tight font-medium text-ink">{t.label}</span>
+            <img src={tile.image} alt="" className="h-[72px] w-[72px] object-contain drop-shadow-[0_6px_8px_rgba(0,0,0,0.12)]" />
+            <span className="text-center text-[14px] leading-tight font-medium text-ink">{t(tile.label)}</span>
           </button>
         ))}
       </nav>
@@ -100,8 +101,8 @@ export function Discover() {
       {nearby.length === 0 ? (
         <EmptyState
           icon={<Search className="h-9 w-9" />}
-          title="Nothing nearby yet"
-          text="Try increasing the distance or choosing another location."
+          title={t('Nothing nearby yet')}
+          text={t('Try increasing the distance or choosing another location.')}
         />
       ) : (
         <>
@@ -118,9 +119,9 @@ export function Discover() {
           {available.length === 0 && (
             <EmptyState
               icon={<Leaf className="h-9 w-9" />}
-              title="Everything’s been rescued!"
-              text="All bags near you are sold out. Check back later or favourite stores to see them first."
-              action={<Button onClick={() => navigate('/browse')}>Browse all stores</Button>}
+              title={t('Everything’s been rescued!')}
+              text={t('All bags near you are sold out. Check back later or favourite stores to see them first.')}
+              action={<Button onClick={() => navigate('/browse')}>{t('Browse all stores')}</Button>}
             />
           )}
         </>

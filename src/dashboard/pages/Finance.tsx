@@ -116,6 +116,7 @@ export function AdminFinance() {
       counts.approved_payouts && { to: '/admin/finance/payouts', text: `${counts.approved_payouts} approved payout${counts.approved_payouts > 1 ? 's' : ''} to send` },
       counts.missing_bank && { to: '/admin/finance/stores', text: `${counts.missing_bank} active store${counts.missing_bank > 1 ? 's' : ''} without bank details` },
       counts.failed_refunds && { to: '/admin/finance/payments', text: `${counts.failed_refunds} refund${counts.failed_refunds > 1 ? 's' : ''} failed` },
+      counts.manual_refunds && { to: '/admin/finance/payments', text: `${counts.manual_refunds} refund${counts.manual_refunds > 1 ? 's' : ''} to make in POK` },
       counts.open_disputes && { to: '/admin/finance/payments', text: `${counts.open_disputes} disputed payment${counts.open_disputes > 1 ? 's' : ''}` },
       counts.overdue_requests && { to: '/admin/finance/requests', text: `${counts.overdue_requests} overdue fee request${counts.overdue_requests > 1 ? 's' : ''}` },
     ].filter(Boolean) as { to: string; text: string }[]
@@ -1185,6 +1186,7 @@ const PAY_LABEL: Record<string, string> = {
   pending: 'Waiting',
   queued: 'Queued',
   sent: 'Sent',
+  manual: 'Refund in POK',
   failed: 'Failed',
   expired: 'Expired',
   open: 'Open',
@@ -1194,6 +1196,7 @@ const PAY_LABEL: Record<string, string> = {
 
 const PAY_TONE: Record<string, 'good' | 'warn' | 'bad' | 'neutral' | 'info'> = {
   succeeded: 'good',
+  manual: 'warn',
   pending: 'warn',
   queued: 'warn',
   sent: 'info',
@@ -1217,6 +1220,17 @@ export function AdminPaymentsMonitor() {
       toast(e instanceof Error ? e.message : 'Could not retry.', 'error')
     }
   }
+  const markDone = async (id: string) => {
+    const reference = window.prompt('Refunded in POK Business → Pagesat online. Reference shown there (optional):', '')
+    if (reference === null) return
+    try {
+      await api(`admin/finance/refunds/${id}/done`, { method: 'POST', json: { reference } })
+      toast('Refund marked as done')
+      reload()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not update.', 'error')
+    }
+  }
   const reconcile = async () => {
     try {
       setRecon(await api('admin/finance/reconcile', { method: 'POST', json: { days: 7 } }))
@@ -1227,7 +1241,7 @@ export function AdminPaymentsMonitor() {
   return (
     <FinancePage
       title="Payments"
-      subtitle={data ? `Card payments, refunds and disputes from the payment provider (${data.provider === 'simulated' ? 'simulated until POK is connected' : data.provider}).` : 'Card payments, refunds and disputes.'}
+      subtitle={data ? `Card payments, refunds and disputes from the payment provider (${data.provider === 'simulated' ? 'simulated until POK is connected' : data.provider === 'pok' ? 'POK' : data.provider}).` : 'Card payments, refunds and disputes.'}
       actions={
         <Btn variant="secondary" onClick={reconcile}>
           Check last 7 days with provider
@@ -1284,6 +1298,11 @@ export function AdminPaymentsMonitor() {
                       {r.status === 'failed' && (
                         <Btn size="sm" variant="secondary" onClick={() => retry(r.id)} title={r.lastError ?? undefined}>
                           Retry
+                        </Btn>
+                      )}
+                      {r.status === 'manual' && (
+                        <Btn size="sm" variant="secondary" onClick={() => markDone(r.id)} title="POK has no refund API: refund the card in POK Business, then mark it here.">
+                          Mark refunded
                         </Btn>
                       )}
                     </span>

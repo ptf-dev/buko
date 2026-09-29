@@ -4,6 +4,9 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import './index.css'
 import App from './App.tsx'
 import { isNative } from './lib/native'
+import { initTelemetry } from './lib/telemetry'
+
+initTelemetry('app')
 
 if (isNative) {
   StatusBar.setStyle({ style: Style.Light }).catch(() => {})

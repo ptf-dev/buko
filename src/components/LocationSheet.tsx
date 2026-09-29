@@ -9,6 +9,7 @@ import type { Location } from '../types'
 import { Button, Chip } from './Button'
 import { MapView } from './LazyMap'
 import { Sheet } from './Sheet'
+import { placeLabel, t, tn } from '../i18n'
 
 /** Named neighbourhoods offered as quick picks. */
 export const PLACES: Location[] = [
@@ -100,10 +101,10 @@ function LocationSheetBody({ onClose }: { onClose: () => void }) {
     <Sheet
       open
       onClose={onClose}
-      title="Location"
+      title={t('Location')}
       footer={
         <button type="button" onClick={onClose} className="w-full py-2 text-center text-[17px] font-semibold text-brand">
-          Close
+          {t('Close')}
         </button>
       }
     >
@@ -112,8 +113,8 @@ function LocationSheetBody({ onClose }: { onClose: () => void }) {
       <ul className="mt-2 divide-y divide-line">
         <Row
           icon={<Navigation className="h-5 w-5" />}
-          label="Current location"
-          sub={geo.status === 'error' ? 'Couldn’t get your location. Check location permissions.' : geo.status === 'loading' ? 'Finding you…' : undefined}
+          label={t('Current location')}
+          sub={geo.status === 'error' ? t('Couldn’t get your location. Check location permissions.') : geo.status === 'loading' ? t('Finding you…') : undefined}
           selected={isCurrent}
           onClick={() => geo.locate((lat, lng) => use({ label: 'Current location', lat, lng, radiusKm: radius }))}
           trailing={geo.status === 'loading' ? <Loader2 className="h-5 w-5 animate-spin text-muted" /> : undefined}
@@ -124,27 +125,27 @@ function LocationSheetBody({ onClose }: { onClose: () => void }) {
             <Row
               key={p}
               icon={p === 'home' ? <Home className="h-5 w-5" /> : <Briefcase className="h-5 w-5" />}
-              label={p === 'home' ? 'Home' : 'Work'}
+              label={p === 'home' ? t('Home') : t('Work')}
               sub={saved ? saved.label.replace(/^(Home|Work), /, '') : undefined}
               selected={!!saved && same(saved, location)}
               onClick={() => (saved ? use(saved) : setMode({ kind: 'map', purpose: p }))}
               trailing={
-                <LinkButton onClick={() => setMode({ kind: 'map', purpose: p })}>{saved ? 'Edit' : 'Add'}</LinkButton>
+                <LinkButton onClick={() => setMode({ kind: 'map', purpose: p })}>{saved ? t('Edit') : t('Add')}</LinkButton>
               }
             />
           )
         })}
         <Row
           icon={<MapPin className="h-5 w-5" />}
-          label="Other location"
-          sub={!isCurrent && !Object.values(places ?? {}).some((p) => p && same(p, location)) ? location.label : undefined}
+          label={t('Other location')}
+          sub={!isCurrent && !Object.values(places ?? {}).some((p) => p && same(p, location)) ? placeLabel(location.label) : undefined}
           selected={false}
           onClick={() => setMode({ kind: 'map', purpose: 'use' })}
-          trailing={<LinkButton onClick={() => setMode({ kind: 'map', purpose: 'use' })}>Choose on map</LinkButton>}
+          trailing={<LinkButton onClick={() => setMode({ kind: 'map', purpose: 'use' })}>{t('Choose on map')}</LinkButton>}
         />
       </ul>
 
-      <h3 className="mt-5 mb-2 font-semibold">Popular areas</h3>
+      <h3 className="mt-5 mb-2 font-semibold">{t('Popular areas')}</h3>
       <div className="flex flex-wrap gap-2">
         {PLACES.map((p) => (
           <Chip key={p.label} active={same(p, location)} onClick={() => use(p)}>
@@ -153,7 +154,7 @@ function LocationSheetBody({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      <h3 className="mt-5 mb-2 font-semibold">Distance</h3>
+      <h3 className="mt-5 mb-2 font-semibold">{t('Distance')}</h3>
       <div className="flex flex-wrap gap-2">
         {RADIUS_OPTIONS_KM.map((km) => (
           <Chip
@@ -184,7 +185,7 @@ function Row({ icon, label, sub, selected, onClick, trailing }: { icon: ReactNod
       </button>
       {trailing}
       {selected && (
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand" aria-label="Selected">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand" aria-label={t('Selected')}>
           <span className="h-2.5 w-2.5 rounded-full bg-white" />
         </span>
       )}
@@ -235,21 +236,21 @@ function AddressSearch({ onPick }: { onPick: (l: Location) => void }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search for a street or area"
-          aria-label="Search for a street or area"
+          placeholder={t('Search for a street or area')}
+          aria-label={t('Search for a street or area')}
           className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted"
         />
         {q && (
-          <button type="button" aria-label="Clear" onClick={() => { setQ(''); setResults(null) }}>
+          <button type="button" aria-label={t('Clear')} onClick={() => { setQ(''); setResults(null) }}>
             <X className="h-4 w-4 text-muted" />
           </button>
         )}
       </label>
       {showing && (
         <ul className="mt-1 max-h-64 overflow-y-auto rounded-xl ring-1 ring-line" aria-live="polite">
-          {state === 'loading' && <li className="px-4 py-3 text-sm text-muted">Searching…</li>}
-          {state === 'error' && <li className="px-4 py-3 text-sm text-red-700">Search isn’t available right now. Choose on the map instead.</li>}
-          {state === 'idle' && results?.length === 0 && <li className="px-4 py-3 text-sm text-muted">No places found.</li>}
+          {state === 'loading' && <li className="px-4 py-3 text-sm text-muted">{t('Searching…')}</li>}
+          {state === 'error' && <li className="px-4 py-3 text-sm text-red-700">{t('Search isn’t available right now. Choose on the map instead.')}</li>}
+          {state === 'idle' && results?.length === 0 && <li className="px-4 py-3 text-sm text-muted">{t('No places found.')}</li>}
           {state === 'idle' &&
             results?.map((r, i) => (
               <li key={`${r.lat},${r.lng},${i}`} className="border-t border-line first:border-0">
@@ -291,11 +292,11 @@ function MapPicker({
     if (distanceKm(lat, lng, draft.lat, draft.lng) < 0.03) return
     setDraft((d) => ({ ...d, lat, lng, label: labelFor(lat, lng) }))
   }
-  const cta = purpose === 'home' ? 'Save as Home' : purpose === 'work' ? 'Save as Work' : `Show ${withBags} ${withBags === 1 ? 'store' : 'stores'} with bags`
+  const cta = purpose === 'home' ? t('Save as Home') : purpose === 'work' ? t('Save as Work') : tn(withBags, 'Show {n} store with bags', 'Show {n} stores with bags')
   return (
-    <Sheet open onClose={onClose} title={purpose === 'use' ? 'Choose on map' : purpose === 'home' ? 'Set Home' : 'Set Work'} footer={<Button className="w-full" onClick={() => onDone(draft)}>{cta}</Button>}>
+    <Sheet open onClose={onClose} title={purpose === 'use' ? t('Choose on map') : purpose === 'home' ? t('Set Home') : t('Set Work')} footer={<Button className="w-full" onClick={() => onDone(draft)}>{cta}</Button>}>
       <button type="button" onClick={onBack} className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted">
-        <ArrowLeft className="h-4 w-4" /> Back
+        <ArrowLeft className="h-4 w-4" /> {t('Back')}
       </button>
       <div className="relative h-72 overflow-hidden rounded-2xl ring-1 ring-line">
         <MapView listings={listings} location={draft} markerStyle="dot" me={null} showRadius fitRadius onMoveEnd={onMapMoved} className="absolute inset-0 z-0" />
@@ -303,11 +304,11 @@ function MapPicker({
           <MapPin className="-mt-8 h-9 w-9 fill-brand text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" strokeWidth={1.8} aria-hidden />
         </div>
         <p className="pointer-events-none absolute top-2.5 left-1/2 z-[500] -translate-x-1/2 rounded-full bg-white/95 px-3 py-1 text-xs font-medium whitespace-nowrap shadow">
-          Drag the map to move the pin
+          {t('Drag the map to move the pin')}
         </p>
       </div>
       <p className="mt-2 px-1 text-sm text-muted" aria-live="polite">
-        <span className="font-semibold text-ink">{draft.label}</span> · {inRange.length} {inRange.length === 1 ? 'store' : 'stores'} within {draft.radiusKm} km
+        <span className="font-semibold text-ink">{placeLabel(draft.label)}</span> · {tn(inRange.length, '{n} store within {km} km', '{n} stores within {km} km', { km: draft.radiusKm })}
       </p>
     </Sheet>
   )

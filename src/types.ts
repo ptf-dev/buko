@@ -70,8 +70,8 @@ export interface Order {
   cancelledBy?: 'customer' | 'store' | 'admin'
   /** Shown to the customer when the store cancelled. */
   cancelReason?: string
-  /** 'pending' while a card payment waits for the provider's confirmation. */
-  paymentStatus?: 'pending'
+  /** pending: waiting for the card payment (bag held); failed: never paid, the bag went back on sale. */
+  paymentStatus?: 'pending' | 'failed'
   /** A problem the customer reported after pickup. Amounts in qindarka (1 L = 100). */
   complaint?: { status: 'open' | 'refunded' | 'rejected'; refundAmount?: number }
   paymentMethod: PaymentMethod

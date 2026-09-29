@@ -395,6 +395,92 @@ const MIGRATIONS = [
       );
     `)
   },
+  // 5: POK manual refunds, emails, push, security (rate limits, 2FA, permissions), monitoring.
+  async (c) => {
+    await c.query(`
+      alter table refunds drop constraint if exists refunds_status_check;
+      alter table refunds add constraint refunds_status_check check (status in ('queued','sent','succeeded','failed','manual'));
+
+      alter table users add column email_verified_at timestamptz;
+      alter table users add column language text check (language in ('sq','en'));
+      alter table users add column totp_secret text;
+      alter table users add column totp_enabled_at timestamptz;
+      alter table users add column totp_recovery text[];
+      alter table users add column permissions text[] not null default '{}';
+      -- Existing admins keep the access they had.
+      update users set permissions = array['finance'] where role = 'admin';
+
+      create table user_tokens (
+        token_hash text primary key,
+        user_id text not null references users(id) on delete cascade,
+        purpose text not null check (purpose in ('verify_email','reset_password','login_2fa')),
+        expires_at timestamptz not null,
+        used_at timestamptz,
+        created_at timestamptz not null default now()
+      );
+      create index user_tokens_user_idx on user_tokens (user_id, purpose);
+
+      create table email_log (
+        id bigserial primary key,
+        to_email text not null,
+        kind text not null,
+        subject text not null,
+        status text not null check (status in ('sent','failed','not_configured')),
+        provider_id text,
+        error text,
+        created_at timestamptz not null default now()
+      );
+      create index email_log_created_idx on email_log (created_at desc);
+
+      create table push_subscriptions (
+        id text primary key,
+        user_id text not null references users(id) on delete cascade,
+        kind text not null check (kind in ('web','fcm')),
+        endpoint text not null unique,
+        keys jsonb,
+        created_at timestamptz not null default now(),
+        last_used_at timestamptz
+      );
+      create index push_subscriptions_user_idx on push_subscriptions (user_id);
+      alter table orders add column reminded_at timestamptz;
+      alter table orders add column receipt_sent_at timestamptz;
+
+      create table login_attempts (
+        id bigserial primary key,
+        key text not null,
+        ok boolean not null,
+        created_at timestamptz not null default now()
+      );
+      create index login_attempts_key_idx on login_attempts (key, created_at desc);
+
+      create table error_events (
+        fingerprint text primary key,
+        source text not null check (source in ('app','dashboard','api')),
+        message text not null,
+        stack text,
+        url text,
+        user_agent text,
+        release text,
+        count integer not null default 1,
+        first_seen timestamptz not null default now(),
+        last_seen timestamptz not null default now(),
+        resolved_at timestamptz
+      );
+      create index error_events_seen_idx on error_events (last_seen desc);
+
+      create table analytics_events (
+        id bigserial primary key,
+        name text not null,
+        path text,
+        props jsonb,
+        session text,
+        platform text,
+        created_at timestamptz not null default now()
+      );
+      create index analytics_events_created_idx on analytics_events (created_at desc);
+      create index analytics_events_name_idx on analytics_events (name, created_at desc);
+    `)
+  },
 ]
 
 /** @type {Promise<void> | null} */

@@ -1,6 +1,7 @@
 // @ts-check
 // Single Vercel Function serving every /api/* route (vercel.json rewrites /api/:path* here).
 import { databaseUrl, HttpError } from './_lib/db.js'
+import { recordError } from './_lib/monitoring.js'
 import { match, PUBLIC_PREFIXES } from './_lib/routes.js'
 
 /** Origins of the native apps (Capacitor) and local development. */
@@ -88,6 +89,13 @@ export async function handle(req) {
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status, cors)
     console.error(err)
+    await recordError({
+      source: 'api',
+      message: `${req.method} ${found.pattern ?? path}: ${err instanceof Error ? err.message : String(err)}`,
+      stack: err instanceof Error ? err.stack : null,
+      url: path,
+      release: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    })
     return json({ error: 'Something went wrong. Please try again.' }, 500, cors)
   }
 }

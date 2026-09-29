@@ -9,6 +9,7 @@ import { initials } from '../lib/format'
 import { formatPrice } from '../lib/format'
 import type { Listing } from '../lib/search'
 import type { Location } from '../types'
+import { t } from '../i18n'
 
 function pinIcon(label: string, variant: '' | 'sold-out' | 'active') {
   return L.divIcon({
@@ -228,7 +229,7 @@ export function MapView({
           markerStyle === 'dot'
             ? dotIcons[l.store.bag.quantity > 0 ? 'on' : 'off']
             : pinIcon(
-                l.store.bag.quantity > 0 ? formatPrice(l.store.bag.price) : 'Sold out',
+                l.store.bag.quantity > 0 ? formatPrice(l.store.bag.price) : t('Sold out'),
                 l.store.id === selectedId ? 'active' : l.store.bag.quantity > 0 ? '' : 'sold-out',
               ),
       })),

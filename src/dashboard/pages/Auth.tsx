@@ -45,13 +45,28 @@ export function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [challenge, setChallenge] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [forgot, setForgot] = useState<'form' | 'sent' | null>(null)
   const { busy, error, run } = useSubmit()
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     run(async () => {
-      const { user } = await api<{ user: SessionUser }>('auth/login', { method: 'POST', json: { email, password } })
-      setUser(user)
+      if (forgot) {
+        await api('auth/forgot', { method: 'POST', json: { email } })
+        setForgot('sent')
+        return
+      }
+      if (challenge) {
+        const { user } = await api<{ user: SessionUser }>('auth/login/2fa', { method: 'POST', json: { challenge, code } })
+        setUser(user)
+        navigate('/', { replace: true })
+        return
+      }
+      const r = await api<{ user?: SessionUser; twoFactor?: { challenge: string } }>('auth/login', { method: 'POST', json: { email, password } })
+      if (r.twoFactor) return setChallenge(r.twoFactor.challenge)
+      setUser(r.user!)
       navigate('/', { replace: true })
     })
   }
@@ -59,22 +74,72 @@ export function Login() {
   return (
     <AuthLayout>
       <Card>
-        <h1 className="text-2xl font-bold tracking-tight">Log in to Ngopu for Business</h1>
-        <p className="mt-1.5 text-[15px] text-muted">For partner stores and the Ngopu team.</p>
-        <form onSubmit={submit} className="mt-7 space-y-4" noValidate>
-          <FormError message={error} />
-          <Field label="Email">
-            {(id) => <Input id={id} type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />}
-          </Field>
-          <Field label="Password">
-            {(id) => (
-              <Input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-            )}
-          </Field>
-          <Btn type="submit" className="w-full" loading={busy} disabled={!email || !password}>
-            Log in
-          </Btn>
-        </form>
+        {forgot === 'sent' ? (
+          <div role="status">
+            <h1 className="text-2xl font-bold tracking-tight">Check your email</h1>
+            <p className="mt-1.5 text-[15px] text-muted">If {email} has an account, we’ve sent a link to choose a new password. It works for 1 hour.</p>
+            <Btn className="mt-6 w-full" variant="secondary" onClick={() => setForgot(null)}>
+              Back to log in
+            </Btn>
+          </div>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold tracking-tight">{forgot ? 'Reset your password' : challenge ? 'Enter your code' : 'Log in to Ngopu for Business'}</h1>
+            <p className="mt-1.5 text-[15px] text-muted">
+              {forgot
+                ? 'We’ll email you a link to choose a new password.'
+                : challenge
+                  ? 'Open your authenticator app and type the 6-digit code for Ngopu. Lost your phone? Use a recovery code.'
+                  : 'For partner stores and the Ngopu team.'}
+            </p>
+            <form onSubmit={submit} className="mt-7 space-y-4" noValidate>
+              <FormError message={error} />
+              {challenge ? (
+                <Field label="Code">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      autoFocus
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={11}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.trim())}
+                      className="text-center font-mono text-lg tracking-[0.3em]"
+                    />
+                  )}
+                </Field>
+              ) : (
+                <>
+                  <Field label="Email">
+                    {(id) => <Input id={id} type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />}
+                  </Field>
+                  {!forgot && (
+                    <Field label="Password">
+                      {(id) => (
+                        <Input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                      )}
+                    </Field>
+                  )}
+                </>
+              )}
+              <Btn type="submit" className="w-full" loading={busy} disabled={challenge ? code.length < 6 : forgot ? !email : !email || !password}>
+                {forgot ? 'Send reset link' : challenge ? 'Verify' : 'Log in'}
+              </Btn>
+            </form>
+            <p className="mt-4 text-center text-sm">
+              {challenge ? (
+                <button type="button" className="font-semibold text-muted hover:text-ink" onClick={() => (setChallenge(null), setCode(''))}>
+                  Start over
+                </button>
+              ) : (
+                <button type="button" className="font-semibold text-brand hover:underline" onClick={() => setForgot(forgot ? null : 'form')}>
+                  {forgot ? 'Back to log in' : 'Forgot your password?'}
+                </button>
+              )}
+            </p>
+          </>
+        )}
       </Card>
       <p className="mt-6 text-center text-[15px] text-muted">
         Own a store and want to join?{' '}
@@ -82,7 +147,6 @@ export function Login() {
           Apply to become a partner
         </Link>
       </p>
-      <p className="mt-2 text-center text-[13px] text-muted">Forgot your password? Ask the Ngopu team to reset it.</p>
     </AuthLayout>
   )
 }

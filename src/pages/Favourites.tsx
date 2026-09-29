@@ -5,6 +5,7 @@ import { Button } from '../components/Button'
 import { EmptyState, PageHeader } from '../components/PageHeader'
 import { useAppState, useNow } from '../state/store'
 import { useListings } from '../state/useListings'
+import { t } from '../i18n'
 
 export function Favourites() {
   const now = useNow()
@@ -18,13 +19,13 @@ export function Favourites() {
 
   return (
     <div>
-      <PageHeader title="Favourites" />
+      <PageHeader title={t('Favourites')} />
       {favs.length === 0 ? (
         <EmptyState
           icon={<Heart className="h-9 w-9" />}
-          title="No favourites yet"
-          text="Tap the heart on a store to add it here, so you never miss their surprise bags."
-          action={<Button onClick={() => navigate('/browse')}>Find stores</Button>}
+          title={t('No favourites yet')}
+          text={t('Tap the heart on a store to add it here, so you never miss their surprise bags.')}
+          action={<Button onClick={() => navigate('/browse')}>{t('Find stores')}</Button>}
         />
       ) : (
         <div className="grid gap-3 p-4">

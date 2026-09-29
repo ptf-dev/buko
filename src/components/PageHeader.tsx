@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { t } from '../i18n'
 
 export function PageHeader({ title, back, right }: { title: string; back?: boolean; right?: ReactNode }) {
   const navigate = useNavigate()
@@ -9,7 +10,7 @@ export function PageHeader({ title, back, right }: { title: string; back?: boole
       {back && (
         <button
           type="button"
-          aria-label="Back"
+          aria-label={t('Back')}
           onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
           className="-ml-2 rounded-full p-2 hover:bg-line"
         >

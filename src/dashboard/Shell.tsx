@@ -1,4 +1,4 @@
-import { Banknote, ClipboardList, ExternalLink, LayoutGrid, LogOut, Package, Store, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { Activity, Banknote, ClipboardList, ExternalLink, LayoutGrid, LogOut, Package, Store, Users, Wallet, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from './data'
@@ -21,12 +21,13 @@ export const PARTNER_NAV: NavItem[] = [
   { to: '/partner/store', label: 'Store profile', short: 'Store', icon: Store },
 ]
 
-export function adminNav(pending: number, financeTodo = 0): NavItem[] {
+export function adminNav(pending: number, financeTodo = 0, finance = true): NavItem[] {
   return [
     { to: '/admin', label: 'Overview', short: 'Overview', icon: LayoutGrid, end: true },
     { to: '/admin/partners', label: 'Partners', short: 'Partners', icon: Store, badge: pending },
     { to: '/admin/orders', label: 'Orders', short: 'Orders', icon: ClipboardList },
-    { to: '/admin/finance', label: 'Finance', short: 'Finance', icon: Banknote, badge: financeTodo },
+    ...(finance ? [{ to: '/admin/finance', label: 'Finance', short: 'Finance', icon: Banknote, badge: financeTodo }] : []),
+    { to: '/admin/monitoring', label: 'Monitoring', short: 'Health', icon: Activity },
     { to: '/admin/team', label: 'Team & settings', short: 'Team', icon: Users },
   ]
 }

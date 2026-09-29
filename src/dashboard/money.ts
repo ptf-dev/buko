@@ -211,6 +211,7 @@ export interface AdminFinanceOverview {
     approved_payouts: number
     missing_bank: number
     failed_refunds: number
+    manual_refunds: number
     open_disputes: number
     open_requests: number
     overdue_requests: number

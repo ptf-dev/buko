@@ -1,6 +1,7 @@
 import { Compass, Heart, Receipt, Search, User } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useAppState } from '../state/store'
+import { t } from '../i18n'
 
 const TABS = [
   { to: '/', label: 'Discover', icon: Compass, end: true },
@@ -30,7 +31,7 @@ export function BottomNav() {
               {({ isActive }) => (
                 <>
                   <Icon className={`h-6 w-6 ${isActive ? 'stroke-[2.4]' : ''}`} />
-                  {label}
+                  {t(label)}
                   {to === '/orders' && upcoming > 0 && (
                     <span className="absolute top-1 left-1/2 ml-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-sun px-1 text-[10px] font-bold text-ink">
                       {upcoming}

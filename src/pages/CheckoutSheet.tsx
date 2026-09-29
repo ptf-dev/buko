@@ -4,12 +4,18 @@ import { useNavigate } from 'react-router-dom'
 import { AuthForm } from '../components/AuthForm'
 import { Button } from '../components/Button'
 import { Sheet } from '../components/Sheet'
-import { customerApi, type CashEligibility } from '../lib/api'
+import { CardPayment } from '../components/CardPayment'
+import { customerApi, type CashEligibility, type PaymentConfig, type PaymentInfo } from '../lib/api'
 import { formatPrice, formatRange } from '../lib/format'
 import type { Listing } from '../lib/search'
 import { MAX_PER_ORDER } from '../state/reducer'
 import { useAccount, useAppState, useNow, useOrderActions, useSync } from '../state/store'
 import type { PaymentMethod } from '../types'
+import { t, translateServer } from '../i18n'
+import { track } from '../lib/telemetry'
+
+/** With POK connected the app takes cards through POK's own form (and cash for trusted customers). */
+export const POK_METHODS: PaymentMethod[] = ['card', 'cash']
 
 export const PAYMENT_METHODS: {
   value: PaymentMethod
@@ -30,13 +36,17 @@ export const PAYMENT_METHODS: {
 export function CheckoutSheet({ open, onClose, listing }: { open: boolean; onClose: () => void; listing: Listing }) {
   const { live } = useSync()
   const { account } = useAccount()
+  const storeId = listing.store.id
+  useEffect(() => {
+    if (open) track('checkout_open', { store: storeId })
+  }, [open, storeId])
   if (!open) return null
   // Live reservations belong to an account; once signed in the sheet continues to checkout.
   if (live && !account)
     return (
-      <Sheet open onClose={onClose} title="Log in to reserve">
+      <Sheet open onClose={onClose} title={t('Log in to reserve')}>
         <p className="mb-4 text-sm text-muted">
-          Your order and pickup code are saved to your account, so you can collect even if you change phone.
+          {t('Your order and pickup code are saved to your account, so you can collect even if you change phone.')}
         </p>
         <AuthForm />
       </Sheet>
@@ -54,6 +64,24 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
   const { live } = useSync()
   // Cash is offered only when the store takes it; whether this customer may use it comes from the server.
   const [cash, setCash] = useState<CashEligibility | null>(null)
+  const [config, setConfig] = useState<PaymentConfig | null>(null)
+  useEffect(() => {
+    if (!live) return
+    let alive = true
+    customerApi
+      .paymentConfig()
+      .then((c) => alive && setConfig(c))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [live])
+  const pok = config?.provider === 'pok'
+  const methods = PAYMENT_METHODS.filter((m) => (pok ? POK_METHODS.includes(m.value) : true)).map((m) =>
+    pok && m.value === 'card' ? { ...m, detail: config?.cardReady ? 'Visa, Mastercard · secured by POK' : 'Card payments are being set up' } : m,
+  )
+  // An order waiting for its card payment: the POK form replaces the sheet's contents.
+  const [pending, setPending] = useState<{ orderId: string; payment: PaymentInfo } | null>(null)
   useEffect(() => {
     if (!live || !store.acceptsCash) return
     let alive = true
@@ -79,22 +107,54 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
     setError('')
     try {
       // Payment is simulated; the reservation itself is real when the server is connected.
-      const [orderId] = await Promise.all([
+      const [{ orderId, payment }] = await Promise.all([
         actions.reserve(store.id, quantity, payingCash || method !== 'cash' ? method : 'card'),
-        new Promise((r) => setTimeout(r, 900)),
+        new Promise((r) => setTimeout(r, pok ? 0 : 900)),
       ])
+      track('order_placed', { method: payingCash ? 'cash' : method, quantity })
+      if (payment) {
+        track('payment_started')
+        setPending({ orderId, payment })
+        setPaying(false)
+        return
+      }
       navigate(`/orders/${orderId}?new=1`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setError(err instanceof Error ? err.message : t('Something went wrong. Please try again.'))
       setPaying(false)
     }
   }
 
+  if (pending)
+    return (
+      <Sheet
+        open
+        onClose={() => {
+          // Leaving the form gives the bag back straight away rather than after the hold.
+          actions.cancel(pending.orderId).catch(() => {})
+          onClose()
+        }}
+        title={t('Pay {amount}', { amount: formatPrice(total) })}
+      >
+        <div className="mb-4 rounded-xl bg-cream p-3 text-sm">
+          <p className="font-semibold">
+            {store.name} · {quantity} × {store.bag.title}
+          </p>
+          <p className="text-muted">{t('Your bag is held for {n} minutes while you pay.', { n: config?.holdMinutes ?? 10 })}</p>
+        </div>
+        <CardPayment orderId={pending.orderId} payment={pending.payment} onPaid={() => {
+            track('payment_succeeded')
+            navigate(`/orders/${pending.orderId}?new=1`)
+          }} />
+      </Sheet>
+    )
+
+  const cardUnavailable = pok && !config?.cardReady && !payingCash
   return (
     <Sheet
       open
       onClose={paying ? () => {} : onClose}
-      title="Reserve your bag"
+      title={t('Reserve your bag')}
       footer={
         <>
           {error && (
@@ -102,15 +162,17 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
               {error}
             </p>
           )}
-          <Button className="w-full" disabled={paying || max <= 0} onClick={pay}>
+          <Button className="w-full" disabled={paying || max <= 0 || cardUnavailable} onClick={pay}>
             {paying ? (
               <>
-                <Loader2 className="h-5 w-5 animate-spin" /> Processing…
+                <Loader2 className="h-5 w-5 animate-spin" /> {t('Processing…')}
               </>
             ) : payingCash ? (
-              `Reserve · pay ${formatPrice(total)} at pickup`
+              t('Reserve · pay {amount} at pickup', { amount: formatPrice(total) })
+            ) : pok ? (
+              t('Continue to pay {amount}', { amount: formatPrice(total) })
             ) : (
-              `Pay ${formatPrice(total)}`
+              t('Pay {amount}', { amount: formatPrice(total) })
             )}
           </Button>
         </>
@@ -120,18 +182,18 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
         <p className="font-semibold">
           {store.name} · {store.bag.title}
         </p>
-        <p className="text-muted">Pick up {formatRange(start, end, now)}</p>
+        <p className="text-muted">{t('Pick up {when}', { when: formatRange(start, end, now) })}</p>
       </div>
 
       <div className="mt-5 flex items-center justify-between">
         <div>
-          <p className="font-semibold">Quantity</p>
-          <p className="text-xs text-muted">Max {max} per order</p>
+          <p className="font-semibold">{t('Quantity')}</p>
+          <p className="text-xs text-muted">{t('Max {n} per order', { n: max })}</p>
         </div>
         <div className="flex items-center gap-4">
           <button
             type="button"
-            aria-label="Decrease quantity"
+            aria-label={t('Decrease quantity')}
             disabled={quantity <= 1}
             onClick={() => setQuantity((q) => q - 1)}
             className="flex h-10 w-10 items-center justify-center rounded-full ring-2 ring-brand text-brand disabled:ring-line disabled:text-line"
@@ -143,7 +205,7 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
           </span>
           <button
             type="button"
-            aria-label="Increase quantity"
+            aria-label={t('Increase quantity')}
             disabled={quantity >= max}
             onClick={() => setQuantity((q) => q + 1)}
             className="flex h-10 w-10 items-center justify-center rounded-full ring-2 ring-brand text-brand disabled:ring-line disabled:text-line"
@@ -153,9 +215,9 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
         </div>
       </div>
 
-      <h3 className="mt-6 mb-2 font-semibold">Payment method</h3>
+      <h3 className="mt-6 mb-2 font-semibold">{t('Payment method')}</h3>
       <div className="space-y-2">
-        {PAYMENT_METHODS.filter((m) => m.value !== 'cash' || cashOffered).map((m) => {
+        {methods.filter((m) => m.value !== 'cash' || cashOffered).map((m) => {
           const off = m.value === 'cash' && !cashAllowed
           return (
             <label
@@ -181,8 +243,8 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
                 <Wallet className="h-5 w-5" />
               )}
               <span className="flex-1">
-                <span className="block text-sm font-semibold">{m.label}</span>
-                <span className="block text-xs text-muted">{off ? (cash?.reason ?? 'Checking…') : m.detail}</span>
+                <span className="block text-sm font-semibold">{t(m.label)}</span>
+                <span className="block text-xs text-muted">{off ? (cash?.reason ? translateServer(cash.reason) : t('Checking…')) : t(m.detail)}</span>
               </span>
             </label>
           )
@@ -191,11 +253,11 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
 
       <div className="mt-6 space-y-1 text-sm">
         <div className="flex justify-between text-muted">
-          <span>Original value</span>
+          <span>{t('Original value')}</span>
           <span className="line-through">{formatPrice(store.bag.originalPrice * quantity)}</span>
         </div>
         <div className="flex justify-between text-lg font-bold">
-          <span>Total</span>
+          <span>{t('Total')}</span>
           <span>{formatPrice(total)}</span>
         </div>
       </div>

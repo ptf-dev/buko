@@ -78,7 +78,8 @@ export async function destroySession(req, secure) {
 }
 
 /**
- * @typedef {{ id: string, email: string, name: string, role: 'admin' | 'partner' | 'customer', storeId: string | null, storeStatus: string | null }} SessionUser
+ * @typedef {{ id: string, email: string, name: string, role: 'admin' | 'partner' | 'customer', storeId: string | null, storeStatus: string | null,
+ *   emailVerifiedAt: string | null, language: string | null, totpEnabledAt: string | null, permissions: string[] }} SessionUser
  */
 
 /**
@@ -89,7 +90,8 @@ export async function currentUser(req) {
   const token = readToken(req)
   if (!token) return null
   const { rows } = await query(
-    `select u.id, u.email, u.name, u.role, u.store_id as "storeId", s.status as "storeStatus"
+    `select u.id, u.email, u.name, u.role, u.store_id as "storeId", s.status as "storeStatus", u.email_verified_at as "emailVerifiedAt",
+            u.language, u.totp_enabled_at as "totpEnabledAt", u.permissions
        from sessions se
        join users u on u.id = se.user_id
        left join stores s on s.id = u.store_id
@@ -99,10 +101,21 @@ export async function currentUser(req) {
   return rows[0] ?? null
 }
 
-/** @param {Request} req @param {'admin' | 'partner' | 'customer'} [role] */
-export async function requireUser(req, role) {
+/**
+ * @param {Request} req @param {'admin' | 'partner' | 'customer'} [role]
+ * @param {{ allowWithout2fa?: boolean }} [o] admins must have two-factor login on for everything except setting it up
+ */
+export async function requireUser(req, role, o = {}) {
   const user = await currentUser(req)
   if (!user) throw new HttpError(401, 'Please log in.')
   if (role && user.role !== role) throw new HttpError(403, 'You don’t have access to this.')
+  if (user.role === 'admin' && !user.totpEnabledAt && !o.allowWithout2fa) throw new HttpError(403, 'Turn on two-factor login to use the admin dashboard.')
+  return user
+}
+
+/** Money: payouts, refunds, billing, finance settings and reports. Admins need the finance permission. @param {Request} req */
+export async function requireFinance(req) {
+  const user = await requireUser(req, 'admin')
+  if (!user.permissions?.includes('finance')) throw new HttpError(403, 'You need the finance permission for this. Ask an admin who has it.')
   return user
 }

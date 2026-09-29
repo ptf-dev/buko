@@ -1,5 +1,6 @@
 import { CO2E_PER_BAG_KG, CURRENCY } from '../config'
 import type { PickupWindow } from '../types'
+import { locale, t } from '../i18n'
 
 const priceFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
@@ -53,10 +54,10 @@ function addDays(ms: number, days: number): number {
 
 export function dayLabel(ms: number, now: number): string {
   const diff = Math.round((startOfDay(ms) - startOfDay(now)) / 86_400_000)
-  if (diff === 0) return 'Today'
-  if (diff === 1) return 'Tomorrow'
-  if (diff === -1) return 'Yesterday'
-  return new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  if (diff === 0) return t('Today')
+  if (diff === 1) return t('Tomorrow')
+  if (diff === -1) return t('Yesterday')
+  return new Date(ms).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 export function formatRange(start: number, end: number, now: number): string {
@@ -79,7 +80,8 @@ export function timeUntil(ms: number, now: number): string {
   if (minutes < 60) return `${minutes} min`
   const hours = Math.floor(minutes / 60)
   const rest = minutes % 60
-  return rest ? `${hours} h ${rest} min` : `${hours} h`
+  const h = t('h')
+  return rest ? `${hours} ${h} ${rest} min` : `${hours} ${h}`
 }
 
 export function co2eKg(bags: number): number {

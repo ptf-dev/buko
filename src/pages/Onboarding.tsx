@@ -6,6 +6,8 @@ import { Button } from '../components/Button'
 import { useGeolocation } from '../components/LocationSheet'
 import { APP_NAME, DEFAULT_LOCATION } from '../config'
 import { useAccount, useAppState, useDispatch, useSync } from '../state/store'
+import { placeLabel, t } from '../i18n'
+import { LanguageSwitch } from '../components/LanguageSwitch'
 
 const SLIDES = [
   {
@@ -55,10 +57,15 @@ export function Onboarding() {
 
   return (
     <div className="flex min-h-full flex-col bg-brand px-6 pt-10 pb-8 text-white">
-      <p className="text-center text-3xl font-black tracking-tight">
-        {APP_NAME.toLowerCase()}
-        <span className="text-sun">.</span>
-      </p>
+      <div className="relative flex items-center justify-center">
+        <p className="text-center text-3xl font-black tracking-tight">
+          {APP_NAME.toLowerCase()}
+          <span className="text-sun">.</span>
+        </p>
+        <div className="absolute right-0">
+          <LanguageSwitch dark />
+        </div>
+      </div>
 
       {phase === 'slides' ? (
         <>
@@ -71,8 +78,8 @@ export function Onboarding() {
                 </div>
               )
             })()}
-            <h1 className="mt-10 text-3xl font-bold">{SLIDES[step]!.title}</h1>
-            <p className="mt-3 max-w-xs text-mint">{SLIDES[step]!.text}</p>
+            <h1 className="mt-10 text-3xl font-bold">{t(SLIDES[step]!.title)}</h1>
+            <p className="mt-3 max-w-xs text-mint">{t(SLIDES[step]!.text)}</p>
           </div>
           <div className="mb-6 flex justify-center gap-2">
             {SLIDES.map((_, i) => (
@@ -80,42 +87,42 @@ export function Onboarding() {
             ))}
           </div>
           <Button className="w-full bg-white !text-brand hover:bg-mint" onClick={next}>
-            {step < SLIDES.length - 1 ? 'Next' : onboarded ? 'Done' : 'Get started'}
+            {step < SLIDES.length - 1 ? t('Next') : onboarded ? t('Done') : t('Get started')}
           </Button>
           {!onboarded && step < SLIDES.length - 1 && (
             <button type="button" onClick={afterSlides} className="mt-3 text-sm font-semibold text-mint">
-              Skip
+              {t('Skip')}
             </button>
           )}
         </>
       ) : phase === 'account' ? (
         <div className="animate-fade-in flex flex-1 flex-col justify-center py-6">
-          <h1 className="text-3xl font-bold">Save your bags</h1>
-          <p className="mt-2 mb-6 text-mint">An account keeps your orders and pickup codes safe on any phone. You need one to reserve.</p>
+          <h1 className="text-3xl font-bold">{t('Save your bags')}</h1>
+          <p className="mt-2 mb-6 text-mint">{t('An account keeps your orders and pickup codes safe on any phone. You need one to reserve.')}</p>
           <AuthForm tone="dark" defaultName={name} onDone={() => setPhase('setup')} />
           <button type="button" onClick={() => setPhase('setup')} className="mt-4 text-sm font-semibold text-mint">
-            Just browsing for now
+            {t('Just browsing for now')}
           </button>
         </div>
       ) : (
         <div className="animate-fade-in flex flex-1 flex-col">
           <div className="flex flex-1 flex-col justify-center">
-            <h1 className="text-3xl font-bold">{account ? `Welcome, ${account.name}!` : 'Let’s get you set up'}</h1>
+            <h1 className="text-3xl font-bold">{account ? t('Welcome, {name}!', { name: account.name }) : t('Let’s get you set up')}</h1>
             {!account && (
               <label className="mt-8 block text-sm font-semibold text-mint">
-                What should we call you?
+                {t('What should we call you?')}
                 <input
                   autoFocus
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Your first name"
+                  placeholder={t('Your first name')}
                   className="mt-2 h-12 w-full rounded-xl bg-white px-4 text-base font-normal text-ink outline-none placeholder:text-muted"
                 />
               </label>
             )}
-            <p className="mt-8 text-sm font-semibold text-mint">Where do you want to find food?</p>
+            <p className="mt-8 text-sm font-semibold text-mint">{t('Where do you want to find food?')}</p>
             {geo.status === 'error' && (
-              <p className="mt-2 text-sm text-sun">We couldn’t access your location. You can use the city centre instead.</p>
+              <p className="mt-2 text-sm text-sun">{t('We couldn’t access your location. You can use the city centre instead.')}</p>
             )}
           </div>
           <div className="space-y-3">
@@ -124,10 +131,10 @@ export function Onboarding() {
               onClick={() => geo.locate((lat, lng) => finish(lat, lng, 'Current location'))}
             >
               <LocateFixed className="h-5 w-5" />
-              {geo.status === 'loading' ? 'Finding you…' : 'Use my location'}
+              {geo.status === 'loading' ? t('Finding you…') : t('Use my location')}
             </Button>
             <Button variant="ghost" className="w-full !text-white ring-2 ring-white/40 hover:bg-white/10" onClick={() => finish()}>
-              <MapPin className="h-5 w-5" /> Explore {DEFAULT_LOCATION.label}
+              <MapPin className="h-5 w-5" /> {t('Explore {place}', { place: placeLabel(DEFAULT_LOCATION.label) })}
             </Button>
           </div>
         </div>

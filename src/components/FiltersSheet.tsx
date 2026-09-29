@@ -3,6 +3,7 @@ import { useAppState, useDispatch } from '../state/store'
 import type { Category, Diet, Filters, SortBy } from '../types'
 import { Button, Chip } from './Button'
 import { Sheet } from './Sheet'
+import { t, tn } from '../i18n'
 
 const SORTS: { value: SortBy; label: string }[] = [
   { value: 'relevance', label: 'Relevance' },
@@ -24,33 +25,33 @@ export function FiltersSheet({ open, onClose, resultCount }: { open: boolean; on
     <Sheet
       open={open}
       onClose={onClose}
-      title="Filters"
+      title={t('Filters')}
       footer={
         <div className="flex gap-3">
           <Button variant="ghost" onClick={() => dispatch({ type: 'resetFilters' })}>
-            Clear all
+            {t('Clear all')}
           </Button>
           <Button className="flex-1" onClick={onClose}>
-            Show {resultCount} {resultCount === 1 ? 'result' : 'results'}
+            {tn(resultCount, 'Show {n} result', 'Show {n} results')}
           </Button>
         </div>
       }
     >
-      <Section title="Sort by">
+      <Section title={t('Sort by')}>
         {SORTS.map((s) => (
           <Chip key={s.value} active={filters.sortBy === s.value} onClick={() => set({ sortBy: s.value })}>
-            {s.label}
+            {t(s.label)}
           </Chip>
         ))}
       </Section>
-      <Section title="Pick-up day">
+      <Section title={t('Pick-up day')}>
         {(['any', 'today', 'tomorrow'] as const).map((d) => (
           <Chip key={d} active={filters.day === d} onClick={() => set({ day: d })}>
-            {d === 'any' ? 'Any day' : d === 'today' ? 'Today' : 'Tomorrow'}
+            {d === 'any' ? t('Any day') : d === 'today' ? t('Today') : t('Tomorrow')}
           </Chip>
         ))}
       </Section>
-      <Section title="Food type">
+      <Section title={t('Food type')}>
         {CATEGORY_ORDER.map((c: Category) => {
           const Icon = CATEGORIES[c].icon
           return (
@@ -60,28 +61,28 @@ export function FiltersSheet({ open, onClose, resultCount }: { open: boolean; on
               onClick={() => set({ categories: toggle(filters.categories, c) })}
             >
               <Icon className="h-4 w-4" />
-              {CATEGORIES[c].label}
+              {t(CATEGORIES[c].label)}
             </Chip>
           )
         })}
       </Section>
-      <Section title="Diet preferences">
+      <Section title={t('Diet preferences')}>
         {(Object.keys(DIET_LABELS) as Diet[]).map((d) => (
           <Chip key={d} active={filters.diets.includes(d)} onClick={() => set({ diets: toggle(filters.diets, d) })}>
-            {DIET_LABELS[d]}
+            {t(DIET_LABELS[d])}
           </Chip>
         ))}
       </Section>
       <label className="mt-5 flex items-center justify-between py-2">
         <span>
-          <span className="block font-semibold">Available now</span>
-          <span className="block text-sm text-muted">Pickup open now or within the hour</span>
+          <span className="block font-semibold">{t('Available now')}</span>
+          <span className="block text-sm text-muted">{t('Pickup open now or within the hour')}</span>
         </span>
-        <Toggle checked={!!filters.availableNow} onChange={(v) => set({ availableNow: v })} label="Available now" />
+        <Toggle checked={!!filters.availableNow} onChange={(v) => set({ availableNow: v })} label={t('Available now')} />
       </label>
       <label className="flex items-center justify-between py-2">
-        <span className="font-semibold">Hide sold-out</span>
-        <Toggle checked={filters.hideSoldOut} onChange={(v) => set({ hideSoldOut: v })} label="Hide sold-out" />
+        <span className="font-semibold">{t('Hide sold-out')}</span>
+        <Toggle checked={filters.hideSoldOut} onChange={(v) => set({ hideSoldOut: v })} label={t('Hide sold-out')} />
       </label>
     </Sheet>
   )

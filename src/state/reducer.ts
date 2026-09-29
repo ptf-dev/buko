@@ -61,6 +61,8 @@ export type Action =
   | { type: 'hydrateStores'; stores: Store[] }
   /** Server copies of this device's orders win over local ones with the same id. */
   | { type: 'upsertOrders'; orders: Order[] }
+  /** The server's full list: unpaid orders it no longer lists (payment abandoned or expired) are dropped. */
+  | { type: 'syncOrders'; orders: Order[] }
   /** Signing out: the orders belonged to the account, not this device. */
   | { type: 'clearOrders' }
 
@@ -158,6 +160,11 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, stores: action.stores }
     case 'clearOrders':
       return { ...state, orders: [] }
+    case 'syncOrders': {
+      const ids = new Set(action.orders.map((o) => o.id))
+      const kept = state.orders.filter((o) => ids.has(o.id) || o.paymentStatus !== 'pending')
+      return reducer({ ...state, orders: kept }, { type: 'upsertOrders', orders: action.orders })
+    }
     case 'upsertOrders': {
       if (!action.orders.length) return state
       const byId = new Map(state.orders.map((o) => [o.id, o]))
