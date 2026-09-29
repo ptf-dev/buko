@@ -694,7 +694,7 @@ async function signup({ req, body, secure }) {
   const hash = await hashPassword(password(body.password))
   const id = newId('u_')
   const ip = clientIp(req)
-  await limit([`signup-ip:${ip}`, 10, 60])
+  await limit([`signup-ip:${ip}`, 20, 60])
   await record([`signup-ip:${ip}`], false)
   const exists = await query('select 1 from users where email = $1', [mail])
   if (exists.rows[0]) throw new HttpError(409, 'An account with this email already exists. Log in instead.')

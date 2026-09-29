@@ -627,6 +627,9 @@ async function dailyCron({ req }) {
   const reminders = await sendDueReminders(true)
   await query("delete from login_attempts where created_at < now() - interval '2 days'")
   await query("delete from user_tokens where expires_at < now() - interval '2 days'")
+  // Retention promised in the privacy policy.
+  await query("delete from analytics_events where created_at < now() - interval '13 months'")
+  await query("delete from error_events where resolved_at < now() - interval '90 days'")
   await settlePaymentRequests()
   const recon = await reconcile(from.toISOString(), to.toISOString())
   return { body: { expired, noShows, refunds, reminders, reconciliation: recon } }

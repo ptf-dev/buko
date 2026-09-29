@@ -40,6 +40,9 @@ export async function pushState(): Promise<PushState> {
     return p.display === 'granted' && pushWanted() ? 'on' : 'off'
   }
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported'
+  // Hidden until the server has push keys (VAPID) configured.
+  const cfg = await customerApi.pushConfig().catch(() => null)
+  if (!cfg?.web) return 'unsupported'
   if (Notification.permission === 'denied') return 'blocked'
   const reg = await navigator.serviceWorker.getRegistration('/')
   const sub = await reg?.pushManager.getSubscription()
