@@ -36,7 +36,7 @@ Rescue delicious unsold food from local stores at a third of the price. Ngopu is
 
 `api/` holds a Vercel Function (plain ESM JavaScript, type-checked with `// @ts-check`) with a Postgres database (Neon via Vercel):
 
-- Tables are created automatically on first request, and an empty database is seeded with the demo stores (`api/_lib/seed-stores.json`, exported from `src/data/stores.ts` by `node scripts/export-seed.mjs`).
+- Tables are created automatically on first request, and an empty database is seeded with the fictional demo stores (`api/_lib/seed-stores.json`, exported from `src/data/stores.ts` by `node scripts/export-seed.mjs`). In production (`VERCEL_ENV=production`) they are seeded suspended, and a migration suspends them in databases seeded earlier, so nobody can pay for a bag at a store that doesn't exist.
 - Passwords are hashed with scrypt. Sessions are httpOnly cookies.
 - Customers don't need an account: their orders are tied to a random device ID.
 - Pickup windows are computed in Tirana time (Europe/Tirane) whatever the server's timezone.
@@ -63,9 +63,9 @@ Live at **https://www.ngopu.app**:
 - `/app` is the web app (`index.html`, `src/App.tsx`).
 - `/dashboard` is the partner & admin dashboard.
 - `/api/*` is the backend.
-- `/downloads/ngopu.apk` is the Android beta download.
+- `/privacy` and `/terms` are the privacy policy and the terms of service (`src/landing/privacyCopy.ts`, `src/landing/termsCopy.ts`).
 
-`npm run build:web` builds both pages and arranges them for Vercel (`scripts/web-layout.mjs`, `vercel.json`). Store links, the landing URL and the web app URL are set in `src/config.ts`. Until `APP_STORE_URL` / `PLAY_STORE_URL` are filled in, the landing page shows "Coming soon" for iPhone and offers the APK for Android. Screenshots used on the landing page are in `public/landing/`.
+`npm run build:web` builds both pages and arranges them for Vercel (`scripts/web-layout.mjs`, `vercel.json`). Store links, the landing URL, the web app URL, the public contact email and the legal entity (`LEGAL_ENTITY`, `LEGAL_ADDRESS`, named in the privacy policy and terms) are set in `src/config.ts`. Until `APP_STORE_URL` / `PLAY_STORE_URL` are filled in, the landing page shows "Coming soon" for both stores (only release-signed builds from the stores are offered to the public; debug APKs are for testers). Screenshots used on the landing page are in `public/landing/`.
 
 ## Tech
 
@@ -90,8 +90,7 @@ The web app is wrapped with [Capacitor](https://capacitorjs.com). The native pro
 
 ```bash
 npm run cap:sync        # build the app + copy into native projects (run after every change)
-npm run android:apk     # build android/app/build/outputs/apk/debug/app-debug.apk
-                        # (copy it to public/downloads/ngopu.apk to update the website download)
+npm run android:apk     # build android/app/build/outputs/apk/debug/app-debug.apk (testing only, never publish it)
 npm run android:open    # open in Android Studio (run on emulator / device)
 npm run ios:open        # open in Xcode (macOS only)
 ```

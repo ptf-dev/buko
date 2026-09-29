@@ -16,6 +16,7 @@ import {
   Store,
   Trash2,
   UserRound,
+  FileText,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -24,7 +25,7 @@ import { Button, Chip } from '../components/Button'
 import { Toggle } from '../components/FiltersSheet'
 import { PageHeader } from '../components/PageHeader'
 import { Sheet } from '../components/Sheet'
-import { APP_NAME, DASHBOARD_URL, LANDING_URL, PRIVACY_URL } from '../config'
+import { APP_NAME, DASHBOARD_URL, LANDING_URL, PRIVACY_URL, TERMS_URL } from '../config'
 import { DIET_LABELS } from '../data/categories'
 import { formatPrice } from '../lib/format'
 import { shareContent } from '../lib/native'
@@ -162,6 +163,13 @@ export function Profile() {
           <ChevronRight className="h-5 w-5 text-muted" />
         </a>
         <MenuLink icon={<CircleHelp className="h-5 w-5" />} label={t('How Ngopu works')} to="/welcome" />
+        <a href={TERMS_URL} className="flex items-center gap-3 border-t border-line px-4 py-4">
+          <span className="text-muted">
+            <FileText className="h-5 w-5" />
+          </span>
+          <span className="flex-1 font-medium">{t('Terms of service')}</span>
+          <ChevronRight className="h-5 w-5 text-muted" />
+        </a>
         <a href={PRIVACY_URL} className="flex items-center gap-3 border-t border-line px-4 py-4">
           <span className="text-muted">
             <ShieldCheck className="h-5 w-5" />

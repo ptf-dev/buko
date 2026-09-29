@@ -16,9 +16,9 @@ The partner dashboard is a website, not part of the app, so it is **not** covere
 | Ratings (1–5 stars + tags) | Yes, if the user rates | `rateOrder` |
 | Location | **No**, used on the device only to sort stores by distance | `src/lib/native.ts` → `currentPosition()` |
 | Diet preferences, favourites, chosen area | **No**, stored only on the device | `src/state/store.tsx` (localStorage) |
-| Card / payment details | **No**, payments are simulated in the beta | `src/pages/CheckoutSheet.tsx` |
+| Card / payment details | **Collected by POK, not by us**: the card form is POK's, inside the app. Declare it as data collected by a third party for payments | `src/components/CardPayment.tsx`, `api/_lib/payments/providers.js` |
 
-Third parties that receive the device's IP address when the app is used: OpenStreetMap (map tiles) and Google Fonts. Hosting is Vercel; the database is Neon. These are service providers, not "sharing" in either store's definition.
+Third parties that receive the device's IP address when the app is used: OpenStreetMap (map tiles), Photon by komoot (address search), Google Fonts and POK (card payments). Hosting is Vercel; the database is Neon. These are service providers, not "sharing" in either store's definition.
 
 ## Google Play Console → App content → Data safety
 

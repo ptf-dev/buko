@@ -1,4 +1,4 @@
-# Production setup: payments, email, push, security, monitoring
+# Production setup: payments, email, push, cron, security, monitoring
 
 Everything below is configured with **Vercel environment variables** (Project → Settings → Environment
 Variables, target *Production*), then a redeploy. Nothing is committed to the repo. Each part switches
@@ -50,6 +50,7 @@ Any SMTP provider works (Zoho Mail, Resend, Postmark, Google Workspace…).
 | `SMTP_USER` | `hello@ngopu.app` |
 | `SMTP_PASS` | an app password (Sensitive) |
 | `MAIL_FROM` | `Ngopu <hello@ngopu.app>` |
+| `CONTACT_EMAIL` | the support address printed in emails (default `info@propfirmstech.com`, the same as `CONTACT_EMAIL` in `src/config.ts`) |
 
 Add SPF and DKIM records for the sending domain at your DNS provider so emails don't land in spam.
 Admin → Monitoring shows how many emails were sent, failed or skipped ("Not set up").
@@ -84,7 +85,15 @@ GET https://www.ngopu.app/api/cron/tick
 Authorization: Bearer <CRON_SECRET>
 ```
 
-## 4. Security
+## 4. Housekeeping cron
+
+| Variable | Value |
+|---|---|
+| `CRON_SECRET` | any long random string (`openssl rand -hex 32`, mark it *Sensitive*) |
+
+Vercel Cron calls `GET /api/cron/daily` at 03:15 UTC with this secret as a Bearer token. The job releases unpaid holds, settles no-shows, retries refunds, reconciles with POK and applies the retention periods promised in the privacy policy. Without the variable every run fails with 401 and the failure shows up in Admin → Monitoring.
+
+## 5. Security
 
 - **Login limits:** 5 wrong passwords per account and 30 per IP in 15 minutes; 3 password-reset emails
   per address per hour; 20 sign-ups per IP per hour.
@@ -94,7 +103,7 @@ Authorization: Bearer <CRON_SECRET>
 - **Finance permission:** payouts, refunds, billing, finance settings and money reports need it.
   Admins who existed before this change keep it; new admins get it only if an admin with it ticks the box.
 
-## 5. Monitoring
+## 6. Monitoring
 
 Admin → **Monitoring**: grouped errors from the app, dashboard and server (with stack traces), app
 visits per day, the visit → order funnel, platforms, most viewed screens and email delivery. All

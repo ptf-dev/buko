@@ -1,4 +1,4 @@
-import { CONTACT_EMAIL, LEGAL_ENTITY } from '../config'
+import { CONTACT_EMAIL, LEGAL_ADDRESS, LEGAL_ENTITY } from '../config'
 import type { Lang } from './i18n'
 
 /**
@@ -26,7 +26,7 @@ const sq: { title: string; intro: string; updated: string; back: string; content
       id: 'who',
       title: 'Kush jemi',
       paragraphs: [
-        `Shërbimin e ofron ${LEGAL_ENTITY} („ne”), me bazë në Tiranë, Shqipëri, dhe është përgjegjës për të dhënat e përshkruara këtu. Për çdo pyetje ose kërkesë rreth të dhënave: ${CONTACT_EMAIL}.`,
+        `Shërbimin e ofron ${LEGAL_ENTITY} („ne”), ${LEGAL_ADDRESS}, dhe është përgjegjës për të dhënat e përshkruara këtu. Për çdo pyetje ose kërkesë rreth të dhënave: ${CONTACT_EMAIL}.`,
       ],
     },
     {
@@ -154,7 +154,7 @@ const en: typeof sq = {
       id: 'who',
       title: 'Who we are',
       paragraphs: [
-        `The service is provided by ${LEGAL_ENTITY} (“we”), based in Tirana, Albania, which is responsible for the data described here. For any question or request about your data: ${CONTACT_EMAIL}.`,
+        `The service is provided by ${LEGAL_ENTITY} (“we”), ${LEGAL_ADDRESS}, which is responsible for the data described here. For any question or request about your data: ${CONTACT_EMAIL}.`,
       ],
     },
     {

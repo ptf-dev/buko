@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
-import { ANDROID_APK_PATH, APP_STORE_URL, LANDING_URL, PLAY_STORE_URL } from '../config'
+import { APP_STORE_URL, LANDING_URL, PLAY_STORE_URL } from '../config'
 import { COPY, LANDING_TITLES } from './copy'
 import { LangProvider, LangSwitch, useLang } from './i18n'
 
@@ -119,7 +119,6 @@ function StoreBadge({
   icon,
   top,
   bottom,
-  download,
   disabled,
   dark = true,
 }: {
@@ -127,7 +126,6 @@ function StoreBadge({
   icon: ReactNode
   top: string
   bottom: string
-  download?: boolean
   disabled?: boolean
   dark?: boolean
 }) {
@@ -145,7 +143,7 @@ function StoreBadge({
   )
   if (disabled || !href) return <span className={cls} aria-disabled>{content}</span>
   return (
-    <a href={href} className={cls} {...(download ? { download: 'ngopu.apk' } : {})}>
+    <a href={href} className={cls}>
       {content}
     </a>
   )
@@ -157,7 +155,7 @@ function GetTheApp({ platform, dark = true, center = false }: { platform: Platfo
   const android = PLAY_STORE_URL ? (
     <StoreBadge key="android" dark={dark} href={PLAY_STORE_URL} icon={<PlayIcon className="h-7 w-7" />} top={t.playTop} bottom="Google Play" />
   ) : (
-    <StoreBadge key="android" dark={dark} href={ANDROID_APK_PATH} download icon={<PlayIcon className="h-7 w-7" />} top={t.apkTop} bottom={t.apkBottom} />
+    <StoreBadge key="android" dark={dark} disabled icon={<PlayIcon className="h-7 w-7" />} top={t.playSoonTop} bottom="Google Play" />
   )
   const ios = APP_STORE_URL ? (
     <StoreBadge key="ios" dark={dark} href={APP_STORE_URL} icon={<AppleIcon className="h-7 w-7" />} top={t.appStoreTop} bottom="App Store" />
@@ -655,8 +653,8 @@ function Footer() {
             <p className="font-semibold text-white">{t.product}</p>
             <ul className="mt-3 space-y-2">
               <li><a href={WEB_APP} className="hover:text-white">{t.webApp}</a></li>
-              <li><a href={PLAY_STORE_URL || ANDROID_APK_PATH} className="hover:text-white">Android</a></li>
-              <li><span>{t.iphoneSoon}</span></li>
+              <li>{PLAY_STORE_URL ? <a href={PLAY_STORE_URL} className="hover:text-white">Android</a> : <span>{t.androidSoon}</span>}</li>
+              <li>{APP_STORE_URL ? <a href={APP_STORE_URL} className="hover:text-white">iPhone</a> : <span>{t.iphoneSoon}</span>}</li>
             </ul>
           </div>
           <div>
@@ -677,6 +675,7 @@ function Footer() {
           <div>
             <p className="font-semibold text-white">{t.legal}</p>
             <ul className="mt-3 space-y-2">
+              <li><a href="/terms" className="hover:text-white">{t.terms}</a></li>
               <li><a href="/privacy" className="hover:text-white">{t.privacy}</a></li>
             </ul>
           </div>

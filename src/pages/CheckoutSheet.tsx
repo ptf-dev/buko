@@ -11,6 +11,7 @@ import type { Listing } from '../lib/search'
 import { MAX_PER_ORDER } from '../state/reducer'
 import { useAccount, useAppState, useNow, useOrderActions, useSync } from '../state/store'
 import type { PaymentMethod } from '../types'
+import { TERMS_URL } from '../config'
 import { t, translateServer } from '../i18n'
 import { track } from '../lib/telemetry'
 
@@ -281,6 +282,13 @@ function CheckoutBody({ onClose, listing }: { onClose: () => void; listing: List
           </p>
         )}
       </div>
+
+      <p className="mt-4 text-xs text-muted">
+        {t('The contents are a surprise and may contain allergens. You can cancel up to 2 hours before pickup for a full refund; an uncollected bag isn’t refunded.')}{' '}
+        <a href={TERMS_URL} className="underline">
+          {t('Terms of service')}
+        </a>
+      </p>
 
     </Sheet>
   )

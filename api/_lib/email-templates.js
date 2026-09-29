@@ -11,7 +11,8 @@ import { TIMEZONE } from './time.js'
 
 export const SITE = 'https://www.ngopu.app'
 const APP = `${SITE}/app`
-const CONTACT = 'hello@ngopu.app'
+/** Support address printed in emails; the same one the privacy policy and terms name (src/config.ts CONTACT_EMAIL). */
+const CONTACT = process.env.CONTACT_EMAIL || 'info@propfirmstech.com'
 
 const C = {
   brand: '#00615f',

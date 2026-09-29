@@ -481,7 +481,17 @@ const MIGRATIONS = [
       create index analytics_events_name_idx on analytics_events (name, created_at desc);
     `)
   },
+  // 8: the fictional demo stores must never sell to real customers. Databases seeded before launch had them
+  // active; suspend them (an admin can reactivate one on purpose, e.g. for a test with a tester account).
+  async (c) => {
+    await c.query(`update stores set status = 'suspended' where id = any($1::text[]) and status = 'active'`, [demoStoreIds()])
+  },
 ]
+
+/** IDs of the fictional seed stores (`seed-stores.json`). */
+function demoStoreIds() {
+  return /** @type {{ id: string }[]} */ (JSON.parse(readFileSync(new URL('./seed-stores.json', import.meta.url), 'utf8'))).map((s) => s.id)
+}
 
 /** @type {Promise<void> | null} */
 let schemaReady = null
@@ -538,14 +548,20 @@ async function schemaIsCurrent() {
   return v[0].v >= MIGRATIONS.length && v[0].seeded
 }
 
-/** @param {pg.PoolClient} client */
+/**
+ * Fills an empty database with the fictional demo stores so there is something to look at. They are active in
+ * development and preview databases only: in production they are suspended, so real customers never pay for a
+ * bag at a store that doesn't exist.
+ * @param {pg.PoolClient} client
+ */
 async function seedStores(client) {
   const seed = JSON.parse(readFileSync(new URL('./seed-stores.json', import.meta.url), 'utf8'))
+  const status = process.env.VERCEL_ENV === 'production' ? 'suspended' : 'active'
   for (const s of seed) {
     await client.query(
       `insert into stores (id, name, branch, category, address, lat, lng, rating, rating_count, highlights, reviews, status, approved_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',now())`,
-      [s.id, s.name, s.branch ?? null, s.category, s.address, s.lat, s.lng, s.rating, s.ratingCount, JSON.stringify(s.highlights), JSON.stringify(s.reviews)],
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now())`,
+      [s.id, s.name, s.branch ?? null, s.category, s.address, s.lat, s.lng, s.rating, s.ratingCount, JSON.stringify(s.highlights), JSON.stringify(s.reviews), status],
     )
     const b = s.bag
     await client.query(

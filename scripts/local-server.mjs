@@ -35,6 +35,7 @@ createServer(async (req, res) => {
   else if (p === '/app' || p.startsWith('/app/')) p = '/app.html'
   else if (p === '/dashboard' || p.startsWith('/dashboard/')) p = '/dashboard.html'
   else if (p === '/privacy') p = '/privacy.html'
+  else if (p === '/terms') p = '/terms.html'
   try {
     const file = join(ROOT, normalize(p))
     const data = await readFile(file)

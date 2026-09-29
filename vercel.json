@@ -25,6 +25,10 @@
     {
       "source": "/privacy",
       "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
     }
   ],
   "redirects": [
@@ -58,22 +62,9 @@
     {
       "source": "/app/partner",
       "destination": "/dashboard"
-    },
-    {
-      "source": "/downloads/buko.apk",
-      "destination": "/downloads/ngopu.apk"
     }
   ],
   "headers": [
-    {
-      "source": "/downloads/(.*).apk",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/vnd.android.package-archive"
-        }
-      ]
-    },
     {
       "source": "/push-sw.js",
       "headers": [

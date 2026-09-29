@@ -1,6 +1,8 @@
 // @ts-check
 /** HTTP endpoints for money: the partner Earnings page and the admin Finance pages. Logic lives in finance.js. */
+import { timingSafeEqual } from 'node:crypto'
 import { requireFinance, requireUser } from './auth.js'
+import { recordError } from './monitoring.js'
 import { notifyStoreCancelled, sendDueReminders } from './notify.js'
 import { HttpError, query } from './db.js'
 import {
@@ -614,13 +616,29 @@ async function providerWebhook({ req, params, raw }) {
 }
 
 /**
+ * The cron endpoints accept only the CRON_SECRET bearer (Vercel Cron sends it automatically). A missing secret
+ * would make every run fail quietly, so it is also recorded as an error for Admin → Monitoring.
+ * @param {Request} req
+ */
+async function requireCronSecret(req) {
+  const secret = process.env.CRON_SECRET
+  if (!secret) {
+    await recordError({ source: 'api', message: 'CRON_SECRET is not set: the daily housekeeping (unpaid holds, no-shows, refunds, data retention) cannot run.' })
+    throw new HttpError(401, 'Unauthorized.')
+  }
+  const given = req.headers.get('authorization') ?? ''
+  const a = Buffer.from(given)
+  const b = Buffer.from(`Bearer ${secret}`)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) throw new HttpError(401, 'Unauthorized.')
+}
+
+/**
  * Daily housekeeping (Vercel Cron, see vercel.json): release unpaid holds, settle no-shows, retry refunds,
  * settle payment requests and reconcile yesterday with the provider. Protected by CRON_SECRET.
  * @type {Handler}
  */
 async function dailyCron({ req }) {
-  const secret = process.env.CRON_SECRET
-  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) throw new HttpError(401, 'Unauthorized.')
+  await requireCronSecret(req)
   const to = new Date()
   const from = new Date(to.getTime() - DAY)
   const [expired, noShows, refunds] = [await expirePendingPayments(true), await settleNoShows(true), await processRefunds()]
@@ -642,8 +660,7 @@ async function dailyCron({ req }) {
  * @type {Handler}
  */
 async function tickCron({ req }) {
-  const secret = process.env.CRON_SECRET
-  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) throw new HttpError(401, 'Unauthorized.')
+  await requireCronSecret(req)
   return { body: { expired: await expirePendingPayments(true), reminders: await sendDueReminders(true), refunds: await processRefunds() } }
 }
 

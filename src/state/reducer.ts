@@ -1,4 +1,4 @@
-import { DEFAULT_LOCATION } from '../config'
+import { DEFAULT_LOCATION, DEMO_MODE } from '../config'
 import { SEED_STORES } from '../data/stores'
 import type { Filters, Location, Order, PaymentMethod, Store, UserProfile } from '../types'
 import { co2eKg, resolveWindow } from '../lib/format'
@@ -27,7 +27,8 @@ export function initialState(): AppState {
     version: STATE_VERSION,
     onboarded: false,
     location: DEFAULT_LOCATION,
-    stores: SEED_STORES,
+    // The fictional demo stores exist only for development. In production the list comes from the server.
+    stores: DEMO_MODE ? SEED_STORES : [],
     favourites: [],
     orders: [],
     profile: { name: '', email: '', diets: [], notifications: true },

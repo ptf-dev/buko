@@ -9,7 +9,7 @@ export default defineConfig({
     rollupOptions: {
       // index.html is the app (also used by the native builds); landing.html is the marketing site;
       // dashboard.html is the partner/admin dashboard.
-      input: { app: 'index.html', landing: 'landing.html', dashboard: 'dashboard.html', privacy: 'privacy.html' },
+      input: { app: 'index.html', landing: 'landing.html', dashboard: 'dashboard.html', privacy: 'privacy.html', terms: 'terms.html' },
     },
   },
   test: {

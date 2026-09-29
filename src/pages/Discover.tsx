@@ -8,7 +8,7 @@ import { Button } from '../components/Button'
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories'
 import { isCollectSoon } from '../lib/format'
 import type { Listing } from '../lib/search'
-import { useAppState, useDispatch, useNow } from '../state/store'
+import { useAppState, useDispatch, useNow, useSync } from '../state/store'
 import { useListings } from '../state/useListings'
 import type { Category } from '../types'
 import { DEFAULT_FILTERS } from '../lib/search'
@@ -58,6 +58,7 @@ export function Discover() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const { all, nearby } = useListings(now)
+  const { checked } = useSync()
   const available = nearby.filter((l) => l.store.bag.quantity > 0)
 
   const browseWith = (filters: Partial<typeof DEFAULT_FILTERS>) => {
@@ -108,7 +109,12 @@ export function Discover() {
         ))}
       </nav>
 
-      {nearby.length === 0 ? (
+      {all.length === 0 && !checked ? (
+        // First launch: the store list is still on its way from the server.
+        <p role="status" className="px-4 py-16 text-center text-sm text-muted">
+          {t('Loading stores…')}
+        </p>
+      ) : nearby.length === 0 ? (
         <EmptyState
           icon={<Search className="h-9 w-9" />}
           title={t('Nothing nearby yet')}

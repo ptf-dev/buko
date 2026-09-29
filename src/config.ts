@@ -31,18 +31,22 @@ export const DASHBOARD_URL = `${LANDING_URL}/dashboard`
 /** Privacy policy (web page, also linked from the app stores). */
 export const PRIVACY_URL = `${LANDING_URL}/privacy`
 
-/** Public contact for privacy and data requests (shown in the privacy policy). */
+/** Terms of service (web page): reservations, pickup, cancellations and refunds. */
+export const TERMS_URL = `${LANDING_URL}/terms`
+
+/** Public contact for support, privacy and data requests (privacy policy, terms and emails). */
 export const CONTACT_EMAIL = 'info@propfirmstech.com'
 
-/** Legal entity named in the privacy policy. Replace with the registered company name and address once it exists. */
+/**
+ * Operator named in the privacy policy and the terms. Put the registered company name here (e.g. "Ngopu SH.P.K.")
+ * and its registered office in LEGAL_ADDRESS once the company is registered; until then the trading name is used.
+ */
 export const LEGAL_ENTITY = 'Ngopu'
+export const LEGAL_ADDRESS = 'Tirana, Albania'
 
 /** App store listings. Leave empty until the apps are live; the landing page then shows "Coming soon". */
 export const APP_STORE_URL: string = ''
 export const PLAY_STORE_URL: string = ''
-
-/** Direct Android download offered on the landing page while the Play Store listing is pending. */
-export const ANDROID_APK_PATH = '/downloads/ngopu.apk'
 
 /**
  * Map tiles. OpenStreetMap's public servers are fine for launch-scale traffic; for heavier use

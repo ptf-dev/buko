@@ -1,6 +1,6 @@
 import { Eye, EyeOff, Loader2, MailCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { PRIVACY_URL } from '../config'
+import { PRIVACY_URL, TERMS_URL } from '../config'
 import { t } from '../i18n'
 import { customerApi } from '../lib/api'
 import { useAccount } from '../state/store'
@@ -172,6 +172,10 @@ export function AuthForm({
         {isSignup ? (
           <>
             {t('By creating an account you agree to our')}{' '}
+            <a href={TERMS_URL} className="underline">
+              {t('terms of service')}
+            </a>{' '}
+            {t('and')}{' '}
             <a href={PRIVACY_URL} className="underline">
               {t('privacy policy')}
             </a>

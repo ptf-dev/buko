@@ -384,6 +384,12 @@ export const SQ: Record<string, string> = {
   'Ngopu for Business': 'Ngopu për biznese',
   'How Ngopu works': 'Si funksionon Ngopu',
   'Privacy policy': 'Politika e privatësisë',
+  'Terms of service': 'Kushtet e shërbimit',
+  'terms of service': 'kushtet e shërbimit',
+  and: 'dhe',
+  'The contents are a surprise and may contain allergens. You can cancel up to 2 hours before pickup for a full refund; an uncollected bag isn’t refunded.':
+    'Përmbajtja është surprizë dhe mund të përmbajë alergjenë. Mund të anulosh deri 2 orë para marrjes me rimbursim të plotë; një çantë e pamarrë nuk rimbursohet.',
+  'Loading stores…': 'Po ngarkojmë dyqanet…',
   'Reset demo data': 'Rivendos të dhënat demo',
   'Log out': 'Dil',
   'Delete account': 'Fshi llogarinë',
