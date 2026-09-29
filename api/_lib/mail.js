@@ -48,13 +48,18 @@ export async function sendMail(m) {
     return { ok: false, error: 'Email isn’t set up: SMTP_HOST, SMTP_USER and SMTP_PASS are needed.' }
   }
   try {
-    const info = await getTransport().sendMail({
-      from: process.env.MAIL_FROM || 'Ngopu <hello@ngopu.app>',
-      to: m.to,
-      subject: m.subject,
-      html: m.html,
-      text: m.text,
-    })
+    const from = process.env.MAIL_FROM || `Ngopu <${process.env.SMTP_USER}>`
+    const mail = { from, to: m.to, subject: m.subject, html: m.html, text: m.text }
+    let info
+    try {
+      info = await getTransport().sendMail(mail)
+    } catch (err) {
+      // Zoho (and most providers) only send as the login mailbox or its aliases ("553 … not allowed to relay").
+      // Fall back to the login mailbox, with replies still going to MAIL_FROM.
+      if (!/\b553\b|not allowed|relay/i.test(err instanceof Error ? err.message : '')) throw err
+      console.warn('mail: MAIL_FROM refused, sending as SMTP_USER. Add it as an alias in the mail provider to use it.')
+      info = await getTransport().sendMail({ ...mail, from: `Ngopu <${process.env.SMTP_USER}>`, replyTo: from })
+    }
     await log(m, 'sent', info.messageId ?? null, null)
     return { ok: true }
   } catch (err) {
