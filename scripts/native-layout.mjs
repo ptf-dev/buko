@@ -2,5 +2,5 @@
 // native apps, so the APK/IPA don't bundle the landing page or the dashboard.
 import { rmSync } from 'node:fs'
 
-for (const path of ['dist/landing.html', 'dist/dashboard.html', 'dist/privacy.html', 'dist/terms.html', 'dist/landing', 'dist/downloads']) rmSync(path, { recursive: true, force: true })
+for (const path of ['dist/landing.html', 'dist/dashboard.html', 'dist/privacy.html', 'dist/terms.html', 'dist/landing', 'dist/downloads', 'dist/.well-known', 'dist/push-sw.js']) rmSync(path, { recursive: true, force: true })
 console.log('native layout: removed the website-only pages from dist')

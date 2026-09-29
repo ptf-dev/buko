@@ -24,6 +24,17 @@ definitions:
       name: Build the web app and copy it into the native projects
       # cap:sync = vite build + strip website-only files + npx cap sync
       script: npm run cap:sync
+    - &firebase_config
+      name: Firebase config for push notifications (optional)
+      # Add GOOGLE_SERVICES_JSON (the base64 of google-services.json from the Firebase console) as a Codemagic
+      # variable. Without it the APK builds fine, but the Android app can't receive remote pushes.
+      script: |
+        if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+          echo "google-services.json written"
+        else
+          echo "GOOGLE_SERVICES_JSON not set: building without Firebase push"
+        fi
 
 workflows:
   android-debug:
@@ -43,6 +54,7 @@ workflows:
       - *install
       - *test
       - *web_build
+      - *firebase_config
       - name: Build debug APK
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
@@ -94,6 +106,7 @@ workflows:
       - *install
       - *test
       - *web_build
+      - *firebase_config
       - name: Build signed app bundle
         # build.gradle reads CM_KEYSTORE_* (set by android_signing) and BUILD_NUMBER (version code).
         script: |

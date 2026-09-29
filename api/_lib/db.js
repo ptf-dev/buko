@@ -435,7 +435,7 @@ const MIGRATIONS = [
       create table push_subscriptions (
         id text primary key,
         user_id text not null references users(id) on delete cascade,
-        kind text not null check (kind in ('web','fcm')),
+        kind text not null check (kind in ('web','fcm','apns')),
         endpoint text not null unique,
         keys jsonb,
         created_at timestamptz not null default now(),
@@ -485,6 +485,13 @@ const MIGRATIONS = [
   // active; suspend them (an admin can reactivate one on purpose, e.g. for a test with a tester account).
   async (c) => {
     await c.query(`update stores set status = 'suspended' where id = any($1::text[]) and status = 'active'`, [demoStoreIds()])
+  },
+  // 9: the iPhone app registers APNs device tokens (kind 'apns') next to web and Firebase subscriptions.
+  async (c) => {
+    await c.query(`
+      alter table push_subscriptions drop constraint if exists push_subscriptions_kind_check;
+      alter table push_subscriptions add constraint push_subscriptions_kind_check check (kind in ('web','fcm','apns'));
+    `)
   },
 ]
 

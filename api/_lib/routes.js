@@ -26,7 +26,7 @@ import { expirePendingPayments, failPayment, PAYMENT_HOLD_MINUTES, processRefund
 import { pokConfigured, pokEnv } from './payments/providers.js'
 import { FINANCE_ROUTES } from './finance-routes.js'
 import { adminMonitoring, adminResolveError, adminTestEmail, reportError, trackEvents } from './monitoring.js'
-import { fcmConfigured, removeSubscription, saveSubscription, sendDueReminders, sendReceipt, webPushConfigured } from './notify.js'
+import { apnsConfigured, fcmConfigured, removeSubscription, saveSubscription, sendDueReminders, sendReceipt, webPushConfigured } from './notify.js'
 
 /**
  * @typedef {{ req: Request, url: URL, params: Record<string, string>, body: any, raw?: string, secure: boolean }} Ctx
@@ -295,13 +295,21 @@ async function verifyOrderPayment({ req, params, body }) {
 
 /** Where the app registers for push, and which kinds are switched on. Public. @type {Handler} */
 async function pushConfig() {
-  return { body: { vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? null, web: webPushConfigured(), native: fcmConfigured() } }
+  return {
+    body: {
+      vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? null,
+      web: webPushConfigured(),
+      native: fcmConfigured() || apnsConfigured(),
+      android: fcmConfigured(),
+      ios: apnsConfigured(),
+    },
+  }
 }
 
 /** @type {Handler} */
 async function pushSubscribe({ req, body }) {
   const user = await requireUser(req, 'customer')
-  const kind = /** @type {'web' | 'fcm'} */ (oneOf(body.kind, 'Kind', ['web', 'fcm']))
+  const kind = /** @type {'web' | 'fcm' | 'apns'} */ (oneOf(body.kind, 'Kind', ['web', 'fcm', 'apns']))
   const endpoint = str(body.endpoint, 'Endpoint', { max: 1000 })
   if (kind === 'web' && !/^https:\/\//.test(endpoint)) throw new HttpError(400, 'Bad push endpoint.')
   const keys = kind === 'web' ? body.keys : undefined

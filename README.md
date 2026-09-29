@@ -86,7 +86,14 @@ npm run build:web # production build laid out for the website (landing + /app)
 
 ## Native apps (Android & iOS)
 
-The web app is wrapped with [Capacitor](https://capacitorjs.com). The native projects are in `android/` and `ios/`. App id is `al.buko.app`. The native builds use the device's location permission, system share sheet, status bar and a Ngopu splash screen and icon (sources are in `assets/`).
+The web app is wrapped with [Capacitor](https://capacitorjs.com): the phone apps load the same `dist/index.html` as the website's `/app`, so every screen and fix ships to web, Android and iOS from one codebase. The native projects are in `android/` and `ios/`; the app id is `al.ngopu.app`. The native builds use these Capacitor plugins (`src/lib/native.ts`, `src/lib/push.ts`, `src/App.tsx`):
+
+- **Geolocation** (the device's location permission), **Share** (system share sheet), **Status bar** and **Splash screen** (Ngopu splash and icon; sources in `assets/`).
+- **Local notifications**: the pickup reminder is scheduled on the phone, 30 minutes before pickup, so it works offline.
+- **Push notifications**: store cancellations arrive as remote pushes, Firebase (FCM) on Android and APNs on iPhone. The phone registers its token with `/api/push/subscribe` when the reminders switch is on and the server has the keys (`docs/production-setup.md`, section 3). Without keys the local reminders still work.
+- **App**: links to the website's customer pages (`/app/...`, `/store/:id` in share and email links, push notifications) open inside the app (universal links / app links, `src/lib/links.ts`), the Android back button goes back through the app's own history, and coming back to the app refreshes stock and orders.
+
+Links open the app only once the site's `public/.well-known/apple-app-site-association` (replace `TEAMID` with the Apple team id) and `public/.well-known/assetlinks.json` (the Play app-signing SHA-256 fingerprint) name the real apps; until then they open the website, as before.
 
 ```bash
 npm run cap:sync        # build the app + copy into native projects (run after every change)
@@ -116,7 +123,7 @@ Android version codes come from Codemagic's `BUILD_NUMBER`. Release signing read
 
 - Real payments (e.g. Stripe) and payouts to partners, with email receipts and password-reset emails
 - Customer accounts (orders are currently tied to the device)
-- Store photos, push notifications for favourites, and signed release builds for Google Play and the App Store
+- Push notifications for favourites, and signed release builds for Google Play and the App Store
 
 ## Design tooling
 

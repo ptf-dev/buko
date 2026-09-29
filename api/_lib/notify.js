@@ -3,12 +3,14 @@
  * Messages to customers about their orders: email receipts, and push notifications for pickup reminders and
  * store cancellations.
  *
- * Push goes to the web app through Web Push (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY) and to the Android/iOS
- * apps through Firebase Cloud Messaging (FCM_SERVICE_ACCOUNT, the service-account JSON). Either works alone;
- * without keys nothing is pushed. The phone apps also schedule their own local pickup reminder, so reminders
- * reach native users even before Firebase is set up.
+ * Push goes to the web app through Web Push (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY), to the Android app through
+ * Firebase Cloud Messaging (FCM_SERVICE_ACCOUNT, the service-account JSON) and to the iPhone app straight
+ * through Apple's APNs (APNS_KEY_ID, APNS_TEAM_ID, APNS_KEY: the .p8 auth key). Each works alone; without keys
+ * nothing is pushed to that kind of device. The phone apps schedule their own local pickup reminder, so
+ * reminders go only to web subscriptions; store cancellations go to every device.
  */
 import { createSign } from 'node:crypto'
+import http2 from 'node:http2'
 import webpush from 'web-push'
 import { newId } from './auth.js'
 import { query } from './db.js'
@@ -102,11 +104,11 @@ let lastReminderRun = 0
 /**
  * Pushes a reminder for orders whose pickup starts within REMINDER_LEAD_MIN minutes. Runs lazily from busy
  * endpoints (at most once a minute per instance) and from the cron jobs; each order is claimed so it's
- * reminded once.
+ * reminded once. Only web subscriptions get it: the phone apps schedule the same reminder locally.
  * @param {boolean} [force]
  */
 export async function sendDueReminders(force = false) {
-  if (!pushConfigured()) return 0
+  if (!webPushConfigured()) return 0
   if (!force && Date.now() - lastReminderRun < 60_000) return 0
   lastReminderRun = Date.now()
   const { rows } = await query(
@@ -124,12 +126,16 @@ export async function sendDueReminders(force = false) {
   for (const o of rows) {
     const l = lang(o.language)
     const t = (/** @type {Date} */ d) => new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, hour: '2-digit', minute: '2-digit' }).format(d)
-    await pushToUser(o.user_id, {
-      title: l === 'sq' ? `Koha për të marrë çantën te ${o.store_name}` : `Time to collect at ${o.store_name}`,
-      body: l === 'sq' ? `Marrja ${t(o.pickup_start)}–${t(o.pickup_end)} · kodi ${o.pickup_code}` : `Pickup ${t(o.pickup_start)}–${t(o.pickup_end)} · code ${o.pickup_code}`,
-      url: `/app/orders/${o.id}`,
-      tag: `order-${o.id}`,
-    })
+    await pushToUser(
+      o.user_id,
+      {
+        title: l === 'sq' ? `Koha për të marrë çantën te ${o.store_name}` : `Time to collect at ${o.store_name}`,
+        body: l === 'sq' ? `Marrja ${t(o.pickup_start)}–${t(o.pickup_end)} · kodi ${o.pickup_code}` : `Pickup ${t(o.pickup_start)}–${t(o.pickup_end)} · code ${o.pickup_code}`,
+        url: `/app/orders/${o.id}`,
+        tag: `order-${o.id}`,
+      },
+      { kinds: ['web'] },
+    )
   }
   return rows.length
 }
@@ -140,17 +146,27 @@ export function webPushConfigured() {
   return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
 }
 
+/** Android app (Firebase Cloud Messaging). */
 export function fcmConfigured() {
   return Boolean(process.env.FCM_SERVICE_ACCOUNT)
 }
 
-export function pushConfigured() {
-  return webPushConfigured() || fcmConfigured()
+/** iPhone app (Apple Push Notification service, token-based auth). */
+export function apnsConfigured() {
+  return Boolean(process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY)
 }
 
+export function pushConfigured() {
+  return webPushConfigured() || fcmConfigured() || apnsConfigured()
+}
+
+/** @typedef {'web' | 'fcm' | 'apns'} PushKind */
+/** @typedef {{ title: string, body: string, url: string, tag?: string }} PushMessage */
+
 /**
- * Saves a device for push. Web: the PushSubscription JSON. Native: the FCM registration token.
- * @param {string} userId @param {{ kind: 'web' | 'fcm', endpoint: string, keys?: unknown }} sub
+ * Saves a device for push. Web: the PushSubscription JSON. Android: the FCM registration token. iPhone: the
+ * APNs device token.
+ * @param {string} userId @param {{ kind: PushKind, endpoint: string, keys?: unknown }} sub
  */
 export async function saveSubscription(userId, sub) {
   await query(
@@ -166,17 +182,18 @@ export async function removeSubscription(userId, endpoint) {
 }
 
 /**
- * Sends to every device of a user. Dead subscriptions (uninstalled app, revoked permission) are removed.
- * Never throws.
- * @param {string} userId @param {{ title: string, body: string, url: string, tag?: string }} msg
+ * Sends to every device of a user (or only the given kinds). Dead subscriptions (uninstalled app, revoked
+ * permission) are removed. Never throws.
+ * @param {string} userId @param {PushMessage} msg @param {{ kinds?: PushKind[] }} [opts]
  */
-export async function pushToUser(userId, msg) {
+export async function pushToUser(userId, msg, opts = {}) {
   if (!pushConfigured()) return 0
   const { rows } = await query('select * from push_subscriptions where user_id = $1', [userId])
   let sent = 0
   for (const s of rows) {
+    if (opts.kinds && !opts.kinds.includes(s.kind)) continue
     try {
-      const ok = s.kind === 'web' ? await sendWeb(s, msg) : await sendFcm(s.endpoint, msg)
+      const ok = s.kind === 'web' ? await sendWeb(s, msg) : s.kind === 'apns' ? await sendApns(s.endpoint, msg) : await sendFcm(s.endpoint, msg)
       if (ok === 'gone') await query('delete from push_subscriptions where id = $1', [s.id])
       else if (ok) {
         sent++
@@ -189,7 +206,7 @@ export async function pushToUser(userId, msg) {
   return sent
 }
 
-/** @param {any} s @param {{ title: string, body: string, url: string, tag?: string }} msg @returns {Promise<boolean | 'gone'>} */
+/** @param {any} s @param {PushMessage} msg @returns {Promise<boolean | 'gone'>} */
 async function sendWeb(s, msg) {
   if (!webPushConfigured()) return false
   webpush.setVapidDetails('mailto:hello@ngopu.app', /** @type {string} */ (process.env.VAPID_PUBLIC_KEY), /** @type {string} */ (process.env.VAPID_PRIVATE_KEY))
@@ -231,24 +248,133 @@ async function fcmAccessToken() {
   return { token: fcmToken.token, project: sa.project_id }
 }
 
-/** @param {string} deviceToken @param {{ title: string, body: string, url: string, tag?: string }} msg @returns {Promise<boolean | 'gone'>} */
+/**
+ * The FCM v1 message for the Android app. The app shows the notification in its "orders" channel and opens
+ * data.url when it's tapped.
+ * @param {string} deviceToken @param {PushMessage} msg
+ */
+export function fcmMessage(deviceToken, msg) {
+  return {
+    message: {
+      token: deviceToken,
+      notification: { title: msg.title, body: msg.body },
+      data: { url: msg.url },
+      android: { notification: { ...(msg.tag ? { tag: msg.tag } : {}), channel_id: 'orders' } },
+    },
+  }
+}
+
+/** @param {string} deviceToken @param {PushMessage} msg @returns {Promise<boolean | 'gone'>} */
 async function sendFcm(deviceToken, msg) {
   if (!fcmConfigured()) return false
   const { token, project } = await fcmAccessToken()
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${project}/messages:send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      message: {
-        token: deviceToken,
-        notification: { title: msg.title, body: msg.body },
-        data: { url: msg.url },
-        android: { notification: { tag: msg.tag, channel_id: 'orders' } },
-      },
-    }),
+    body: JSON.stringify(fcmMessage(deviceToken, msg)),
   })
   if (res.ok) return true
   const body = await res.json().catch(() => null)
   if (res.status === 404 || body?.error?.details?.some?.((/** @type {any} */ d) => d.errorCode === 'UNREGISTERED')) return 'gone'
   throw new Error(`FCM send failed: ${res.status}`)
+}
+
+/* ------------------------------------------------------------------ APNs (iPhone app) */
+
+/** Bundle id of the iPhone app, the APNs topic. */
+export const APNS_TOPIC = process.env.APNS_BUNDLE_ID || 'al.ngopu.app'
+
+/**
+ * The APNs payload for the iPhone app: a standard alert plus our url, which the app reads from
+ * notification.data when the push is tapped.
+ * @param {PushMessage} msg
+ */
+export function apnsPayload(msg) {
+  return {
+    aps: { alert: { title: msg.title, body: msg.body }, sound: 'default', ...(msg.tag ? { 'thread-id': msg.tag } : {}) },
+    url: msg.url,
+  }
+}
+
+/** @type {{ token: string, issuedAt: number } | null} */
+let apnsJwt = null
+
+/**
+ * Provider token for APNs: an ES256 JWT signed with the .p8 auth key. Apple wants it reused for at least
+ * 20 minutes and refreshed within an hour; we keep it for 50.
+ */
+function apnsProviderToken() {
+  if (apnsJwt && Date.now() - apnsJwt.issuedAt < 50 * 60_000) return apnsJwt.token
+  const b64 = (/** @type {object} */ o) => Buffer.from(JSON.stringify(o)).toString('base64url')
+  const iat = Math.floor(Date.now() / 1000)
+  const unsigned = `${b64({ alg: 'ES256', kid: process.env.APNS_KEY_ID })}.${b64({ iss: process.env.APNS_TEAM_ID, iat })}`
+  // JWTs need the raw r||s signature (ieee-p1363), not the DER encoding Node produces by default.
+  const key = /** @type {string} */ (process.env.APNS_KEY).replace(/\\n/g, '\n')
+  const sig = createSign('sha256').update(unsigned).sign({ key, dsaEncoding: 'ieee-p1363' }).toString('base64url')
+  apnsJwt = { token: `${unsigned}.${sig}`, issuedAt: Date.now() }
+  return apnsJwt.token
+}
+
+/** Xcode debug builds talk to the sandbox gateway; TestFlight and App Store builds to production. */
+function apnsHost() {
+  return process.env.APNS_ENV === 'sandbox' ? 'https://api.sandbox.push.apple.com' : 'https://api.push.apple.com'
+}
+
+/**
+ * One HTTP/2 request to APNs (APNs speaks only HTTP/2, which fetch doesn't). Resolves with the status and the
+ * JSON body, if any.
+ * @param {string} deviceToken @param {string} body
+ * @returns {Promise<{ status: number, reason?: string }>}
+ */
+function apnsRequest(deviceToken, body, headers = /** @type {Record<string, string>} */ ({})) {
+  return new Promise((resolve, reject) => {
+    const client = http2.connect(apnsHost())
+    const finish = (/** @type {(v: any) => void} */ cb, /** @type {any} */ v) => {
+      client.close()
+      cb(v)
+    }
+    client.on('error', (err) => finish(reject, err))
+    const req = client.request({
+      ':method': 'POST',
+      ':path': `/3/device/${deviceToken}`,
+      'content-type': 'application/json',
+      authorization: `bearer ${apnsProviderToken()}`,
+      'apns-topic': APNS_TOPIC,
+      'apns-push-type': 'alert',
+      'apns-priority': '10',
+      ...headers,
+    })
+    let status = 0
+    let text = ''
+    req.setEncoding('utf8')
+    req.on('response', (h) => {
+      status = Number(h[':status'] ?? 0)
+    })
+    req.on('data', (chunk) => {
+      text += chunk
+    })
+    req.on('end', () => {
+      let reason
+      try {
+        reason = text ? JSON.parse(text).reason : undefined
+      } catch {
+        reason = undefined
+      }
+      finish(resolve, { status, reason })
+    })
+    req.on('error', (err) => finish(reject, err))
+    req.setTimeout(10_000, () => req.close(http2.constants.NGHTTP2_CANCEL))
+    req.end(body)
+  })
+}
+
+/** @param {string} deviceToken @param {PushMessage} msg @returns {Promise<boolean | 'gone'>} */
+async function sendApns(deviceToken, msg) {
+  if (!apnsConfigured()) return false
+  const { status, reason } = await apnsRequest(deviceToken, JSON.stringify(apnsPayload(msg)), msg.tag ? { 'apns-collapse-id': msg.tag } : {})
+  if (status === 200) return true
+  // 410: the token is no longer active. 400 BadDeviceToken: a token from the other gateway (sandbox vs production).
+  if (status === 410 || reason === 'BadDeviceToken' || reason === 'Unregistered' || reason === 'DeviceTokenNotForTopic') return 'gone'
+  if (status === 403 && reason === 'ExpiredProviderToken') apnsJwt = null
+  throw new Error(`APNs send failed: ${status}${reason ? ` ${reason}` : ''}`)
 }

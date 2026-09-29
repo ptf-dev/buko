@@ -29,3 +29,6 @@ dist-ssr
 .impeccable/cache/
 /build
 .tapflow/artifacts/
+
+# Firebase config for the Android app: written by CI from GOOGLE_SERVICES_JSON (see docs/production-setup.md)
+android/app/google-services.json

@@ -152,8 +152,9 @@ export const customerApi = {
   verifyEmail: (token: string) => customer('auth/verify-email', { method: 'POST', json: { token } }),
   resendVerification: () => customer<{ ok: true; alreadyVerified?: boolean }>('auth/verify-email/resend', { method: 'POST', json: {} }),
   setLanguage: (language: 'sq' | 'en') => customer<{ user: CustomerAccount }>('auth/me', { method: 'PATCH', json: { language } }).then((r) => r.user),
-  pushConfig: () => api<{ vapidPublicKey: string | null; web: boolean; native: boolean }>('push/config'),
-  pushSubscribe: (sub: { kind: 'web' | 'fcm'; endpoint: string; keys?: { p256dh: string; auth: string } }) =>
+  /** Which push transports the server has keys for: web (VAPID), android (Firebase) and ios (APNs). */
+  pushConfig: () => api<{ vapidPublicKey: string | null; web: boolean; native: boolean; android: boolean; ios: boolean }>('push/config'),
+  pushSubscribe: (sub: { kind: 'web' | 'fcm' | 'apns'; endpoint: string; keys?: { p256dh: string; auth: string } }) =>
     customer('push/subscribe', { method: 'POST', json: sub }),
   pushUnsubscribe: (endpoint: string) => customer('push/unsubscribe', { method: 'POST', json: { endpoint } }),
   me: () => customer<{ user: (CustomerAccount & { role: string; cash?: CashEligibility }) | null }>('auth/me').then((r) => r.user),

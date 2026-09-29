@@ -5,6 +5,7 @@ import type { Order, PaymentMethod } from '../types'
 import { initialState, randomId, randomPickupCode, reducer, STATE_VERSION, type Action, type AppState } from './reducer'
 import { t } from '../i18n'
 import { track } from '../lib/telemetry'
+import { syncRemoteRegistration } from '../lib/push'
 
 const STORAGE_KEY = 'buko:state'
 
@@ -111,6 +112,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAccount(user)
       dispatch({ type: 'updateProfile', profile: { name: user.name, email: user.email } })
       refresh()
+      // Phone apps: register this phone's push token to the account (only when reminders are switched on).
+      syncRemoteRegistration(true)
       // The full account (verified email, tester flag) comes from auth/me.
       customerApi
         .me()
@@ -138,6 +141,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         signedIn(r.user, r.token)
       },
       async logout() {
+        // Remove the phone's push token first: the call needs the session that logout ends.
+        await syncRemoteRegistration(false)
         await customerApi.logout().catch(() => {})
         signedOut()
       },
@@ -148,6 +153,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       async deleteAccount() {
         await customerApi.deleteAccount()
+        // The account (and its push subscriptions) is gone; forget the token on this phone too.
+        await syncRemoteRegistration(false)
         signedOut()
       },
       async reload() {

@@ -71,10 +71,43 @@ npx web-push generate-vapid-keys
 The "Pickup reminders" switch appears in Profile once these are set.
 
 **Android / iPhone apps:** the pickup reminder is scheduled on the phone itself (no server needed), so
-it works now. Remote pushes for *store cancellations* on the phone apps need Firebase:
-create a Firebase project, add `google-services.json` (Android) / APNs key (iOS), add
-`@capacitor/push-notifications`, and set `FCM_SERVICE_ACCOUNT` (the service-account JSON) in Vercel. The
-server side for FCM is already written (`api/_lib/notify.js`).
+it works without any of this. Remote pushes for *store cancellations* need a key per platform; the phone
+registers its token only once the key for its platform is set (`GET /api/push/config` reports it).
+
+*Android (Firebase Cloud Messaging):* create a Firebase project with an Android app for `al.ngopu.app`.
+
+| Where | Variable | Value |
+|---|---|---|
+| Vercel | `FCM_SERVICE_ACCOUNT` | Firebase → Project settings → Service accounts → Generate new private key: the whole JSON (Sensitive) |
+| Codemagic | `GOOGLE_SERVICES_JSON` | `base64 -i google-services.json` (Firebase → Project settings → Your apps). The Android workflows write it to `android/app/google-services.json`, which is not committed |
+
+*iPhone (Apple Push Notification service, no Firebase needed):* in the Apple Developer portal, enable
+**Push Notifications** and **Associated Domains** on the App ID `al.ngopu.app`, and create an APNs key
+(Certificates, Identifiers & Profiles → Keys → Apple Push Notifications service). Download the `.p8` once.
+
+| Variable | Value |
+|---|---|
+| `APNS_KEY_ID` | the 10-character key id |
+| `APNS_TEAM_ID` | the Apple team id |
+| `APNS_KEY` | the contents of the `.p8` file (Sensitive; newlines may be pasted as `\n`) |
+| `APNS_BUNDLE_ID` | only if the bundle id ever differs from `al.ngopu.app` |
+| `APNS_ENV` | `sandbox` only for Xcode debug builds on a device; leave unset for TestFlight and the App Store |
+
+The phone reminders stay local, so only web subscriptions get the reminder push; cancellations go to
+every device. Dead tokens (uninstalled app) are removed on the first failed send.
+
+## 3b. Links that open the apps
+
+Share links, email links and push notifications point at `https://www.ngopu.app/app/...`. The apps claim
+those links (and `/store/:id`) once the two files in `public/.well-known/` name the real apps:
+
+| File | Replace |
+|---|---|
+| `apple-app-site-association` | `TEAMID` with the Apple team id (`TEAMID.al.ngopu.app`) |
+| `assetlinks.json` | `REPLACE_WITH_PLAY_SIGNING_SHA256` with the SHA-256 of the **Play app signing** certificate (Play Console → Test and release → App integrity), formatted `AA:BB:...`. For the Codemagic-signed test APK use the keystore's fingerprint instead (`keytool -list -v -keystore ngopu.keystore`) |
+
+Redeploy the site afterwards. Until then the links open the website, exactly as before. The landing page,
+the dashboard and the legal pages are never claimed by the apps.
 
 **Timing:** Vercel's free plan runs crons once a day, so reminders are also sent whenever the app polls
 (every minute while anyone has it open). For reminders on time even when it's quiet, add a free

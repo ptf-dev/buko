@@ -12,13 +12,14 @@ The partner dashboard is a website, not part of the app, so it is **not** covere
 |---|---|---|
 | Account: name, email, password (stored as a scrypt hash) | Yes, when the user signs up (required to reserve) | `api/_lib/routes.js` → `signup` |
 | Random device ID (app-generated UUID) | Yes, with every order request | `src/lib/api.ts` → `deviceId()` |
+| Push token (Firebase on Android, APNs on iPhone) | Yes, only while the "Pickup reminders" switch is on and the user is signed in; removed on log out or when the switch is off | `src/lib/push.ts` → `registerRemote()` |
 | Orders (store, quantity, price, pickup window, pickup code, chosen payment method, status) | Yes | `api/_lib/routes.js` → `createOrder` |
 | Ratings (1–5 stars + tags) | Yes, if the user rates | `rateOrder` |
 | Location | **No**, used on the device only to sort stores by distance | `src/lib/native.ts` → `currentPosition()` |
 | Diet preferences, favourites, chosen area | **No**, stored only on the device | `src/state/store.tsx` (localStorage) |
 | Card / payment details | **Collected by POK, not by us**: the card form is POK's, inside the app. Declare it as data collected by a third party for payments | `src/components/CardPayment.tsx`, `api/_lib/payments/providers.js` |
 
-Third parties that receive the device's IP address when the app is used: OpenStreetMap (map tiles), Photon by komoot (address search), Google Fonts and POK (card payments). Hosting is Vercel; the database is Neon. These are service providers, not "sharing" in either store's definition.
+Third parties that receive the device's IP address when the app is used: OpenStreetMap (map tiles), Photon by komoot (address search), Google Fonts and POK (card payments). Push notifications go through Google (Firebase Cloud Messaging) on Android and Apple (APNs) on iPhone; they carry the store name, the pickup time and the pickup code, never the person's name or email. Hosting is Vercel; the database is Neon. These are service providers, not "sharing" in either store's definition.
 
 ## Google Play Console → App content → Data safety
 
@@ -35,7 +36,7 @@ Third parties that receive the device's IP address when the app is used: OpenStr
 | Personal info → Email address | Yes | No | No | Required (needed to reserve) | App functionality, Account management |
 | Financial info → Purchase history | Yes | No | No | Required (needed to reserve) | App functionality |
 | App activity → Other user-generated content (ratings) | Yes | No | No | Optional | App functionality |
-| Device or other IDs → Device or other IDs (app-generated random ID) | Yes | No | No | Required | App functionality, Fraud prevention, security, and compliance |
+| Device or other IDs → Device or other IDs (app-generated random ID; push token when reminders are on) | Yes | No | No | Required (push token optional) | App functionality, Fraud prevention, security, and compliance |
 
 **Do not declare** (not collected under Google's definition, because it never leaves the device):
 - Location: approximate or precise. The permission is requested, but the location is processed on the device only. Google's definition of "collected" is data transmitted off the device.
@@ -60,7 +61,7 @@ Third parties that receive the device's IP address when the app is used: OpenStr
 | Purchases → Purchase History | Yes | No | App Functionality |
 | User Content → Other User Content (ratings) | Yes | No | App Functionality |
 | Identifiers → User ID (account ID) | Yes | No | App Functionality |
-| Identifiers → Device ID | Yes | No | App Functionality |
+| Identifiers → Device ID (random ID; push token when reminders are on) | Yes | No | App Functionality |
 
 - **Account deletion (guideline 5.1.1(v)):** in-app, Profile → Delete account.
 

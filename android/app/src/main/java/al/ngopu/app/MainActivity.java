@@ -1,4 +1,4 @@
-package al.buko.app;
+package al.ngopu.app;
 
 import com.getcapacitor.BridgeActivity;
 

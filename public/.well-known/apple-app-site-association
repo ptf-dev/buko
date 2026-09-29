@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.al.ngopu.app"],
+        "components": [
+          { "/": "/app", "comment": "The customer app" },
+          { "/": "/app/*", "comment": "Store pages, orders, email links" },
+          { "/": "/store/*", "comment": "Short store links" }
+        ]
+      }
+    ]
+  }
+}

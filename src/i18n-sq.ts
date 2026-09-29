@@ -417,6 +417,7 @@ export const SQ: Record<string, string> = {
   'Pickup reminders': 'Kujtesat e marrjes',
   'Notifications are blocked. Allow them in your phone or browser settings.': 'Njoftimet janë bllokuar. Lejoji te cilësimet e telefonit ose shfletuesit.',
   '30 minutes before pickup, and if a store cancels': '30 minuta para marrjes, dhe nëse një dyqan anulon',
+  'Order updates': 'Njoftime për porositë',
   'Notifications aren’t available yet. Try again later.': 'Njoftimet nuk janë ende gati. Provo më vonë.',
   'Time to collect at {store}': 'Koha për të marrë çantën te {store}',
   'Pickup {from}–{to} · code {code}': 'Marrja {from}–{to} · kodi {code}',

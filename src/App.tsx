@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { App as NativeApp } from '@capacitor/app'
 import { LocalNotifications } from '@capacitor/local-notifications'
+import { PushNotifications } from '@capacitor/push-notifications'
 import { WifiOff } from 'lucide-react'
 import { BottomNav } from './components/BottomNav'
 import { Browse } from './pages/Browse'
@@ -12,6 +14,7 @@ import { Orders } from './pages/Orders'
 import { Profile } from './pages/Profile'
 import { StoreDetail } from './pages/StoreDetail'
 import { DASHBOARD_URL, DEMO_MODE } from './config'
+import { appPathFromUrl } from './lib/links'
 import { isNative, ROUTER_BASENAME } from './lib/native'
 import { syncLocalReminders } from './lib/push'
 import { track } from './lib/telemetry'
@@ -32,6 +35,7 @@ const TAB_ROUTES = ['/', '/browse', '/orders', '/favourites', '/profile']
 
 function Shell() {
   const { onboarded, orders, stores } = useAppState()
+  const { refresh } = useSync()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const mainRef = useRef<HTMLElement>(null)
@@ -47,17 +51,64 @@ function Shell() {
     syncLocalReminders(orders, (id) => stores.find((s) => s.id === id)?.name).catch(() => {})
   }, [orders, stores])
 
-  // Phone apps: tapping a reminder opens its order.
+  // Phone apps: tapping a reminder opens its order; so does tapping a push from the server (whose urls are
+  // website paths such as /app/orders/x).
   useEffect(() => {
     if (!isNative) return
-    const sub = LocalNotifications.addListener('localNotificationActionPerformed', (e) => {
-      const url = e.notification.extra?.url
-      if (typeof url === 'string') navigate(url)
-    })
+    const subs = [
+      LocalNotifications.addListener('localNotificationActionPerformed', (e) => {
+        const url = e.notification.extra?.url
+        if (typeof url === 'string') navigate(url)
+      }),
+      PushNotifications.addListener('pushNotificationActionPerformed', (e) => {
+        const url = e.notification.data?.url
+        const path = typeof url === 'string' ? appPathFromUrl(url) : null
+        if (path) navigate(path)
+      }),
+    ]
+    return () => {
+      for (const sub of subs) sub.then((h) => h.remove()).catch(() => {})
+    }
+  }, [navigate])
+
+  // Phone apps: links to the website (share links, email links) open inside the app, both when it's already
+  // running and when the link starts it.
+  useEffect(() => {
+    if (!isNative) return
+    const open = (url: string | undefined) => {
+      const path = url ? appPathFromUrl(url) : null
+      if (path) navigate(path)
+    }
+    NativeApp.getLaunchUrl()
+      .then((launch) => open(launch?.url))
+      .catch(() => {})
+    const sub = NativeApp.addListener('appUrlOpen', (e) => open(e.url))
     return () => {
       sub.then((h) => h.remove()).catch(() => {})
     }
   }, [navigate])
+
+  // Android: the back button goes back through the app's own history, from another tab to Discover, and
+  // leaves the app from Discover.
+  // (Installing @capacitor/app switches off Capacitor's built-in handling, so this listener is required.)
+  // iOS and Android: coming back to the app refreshes stock and orders straight away.
+  useEffect(() => {
+    if (!isNative) return
+    const subs = [
+      NativeApp.addListener('backButton', ({ canGoBack }) => {
+        const path = window.location.pathname
+        if (path === '/') NativeApp.exitApp()
+        else if (TAB_ROUTES.includes(path) || !canGoBack) navigate('/', { replace: true })
+        else window.history.back()
+      }),
+      NativeApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) refresh()
+      }),
+    ]
+    return () => {
+      for (const sub of subs) sub.then((h) => h.remove()).catch(() => {})
+    }
+  }, [navigate, refresh])
 
   // Email links (confirm email, reset password) work before onboarding too.
   if (!onboarded && !['/welcome', '/verify', '/reset'].includes(pathname)) return <Navigate to="/welcome" replace />

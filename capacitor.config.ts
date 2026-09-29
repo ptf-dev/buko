@@ -12,8 +12,13 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
-      style: 'DARK',
+      // Dark icons on the app's white header (main.tsx sets the same at runtime).
+      style: 'LIGHT',
       backgroundColor: '#ffffff',
+    },
+    PushNotifications: {
+      // iOS: show a push that arrives while the app is open.
+      presentationOptions: ['badge', 'sound', 'alert'],
     },
   },
 }

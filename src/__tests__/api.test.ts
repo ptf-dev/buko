@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { resolveWindow, tzOffset } from '../../api/_lib/time.js'
 // @ts-expect-error plain JS module without type declarations
 import { match } from '../../api/_lib/routes.js'
+// @ts-expect-error plain JS module without type declarations
+import { apnsPayload, fcmMessage } from '../../api/_lib/notify.js'
 
 describe('api time', () => {
   it('knows Tirana is UTC+2 in summer and UTC+1 in winter', () => {
@@ -39,5 +41,32 @@ describe('api router', () => {
     expect(m?.params).toEqual({ id: 'abc123' })
     expect(match('PATCH', 'admin/stores/furra-e-lagjes')?.params).toEqual({ id: 'furra-e-lagjes' })
     expect(match('GET', 'admin/nope')).toBeNull()
+  })
+})
+
+describe('push messages for the phone apps', () => {
+  const msg = { title: 'Furra cancelled your order', body: 'Sorry about this.', url: '/app/orders/o_1', tag: 'order-o_1' }
+
+  it('builds an FCM message the Android app can open', () => {
+    const m = fcmMessage('device-token', msg).message
+    expect(m.token).toBe('device-token')
+    expect(m.notification).toEqual({ title: msg.title, body: msg.body })
+    expect(m.data.url).toBe('/app/orders/o_1')
+    expect(m.android.notification.channel_id).toBe('orders')
+    expect(m.android.notification.tag).toBe('order-o_1')
+  })
+
+  it('builds an APNs payload the iPhone app can open', () => {
+    const p = apnsPayload(msg)
+    expect(p.aps.alert).toEqual({ title: msg.title, body: msg.body })
+    expect(p.aps['thread-id']).toBe('order-o_1')
+    expect(p.url).toBe('/app/orders/o_1')
+    expect(apnsPayload({ ...msg, tag: undefined }).aps['thread-id']).toBeUndefined()
+  })
+
+  it('routes push registration', () => {
+    expect(match('POST', 'push/subscribe')).not.toBeNull()
+    expect(match('POST', 'push/unsubscribe')).not.toBeNull()
+    expect(match('GET', 'push/config')).not.toBeNull()
   })
 })
