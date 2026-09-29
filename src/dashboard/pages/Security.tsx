@@ -1,6 +1,6 @@
 import { Copy, KeyRound, ShieldCheck } from 'lucide-react'
 import QRCode from 'qrcode'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { api } from '../../lib/api'
 import { useAuth, useToast } from '../data'
 import { AuthLayout } from '../Shell'
@@ -150,9 +150,6 @@ export function SecurityPanel() {
   const [off, setOff] = useState({ open: false, password: '', code: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    if (!off.open) setError(null)
-  }, [off.open])
   if (!user) return null
   const enabled = user.twoFactor?.enabled
   const isAdmin = user.role === 'admin'
@@ -197,7 +194,7 @@ export function SecurityPanel() {
           </div>
           {!enabled && <Btn onClick={() => setSetupOpen(true)}>Turn on</Btn>}
           {enabled && !isAdmin && !off.open && (
-            <Btn variant="secondary" onClick={() => setOff({ ...off, open: true })}>
+            <Btn variant="secondary" onClick={() => (setError(null), setOff({ ...off, open: true }))}>
               Turn off
             </Btn>
           )}
