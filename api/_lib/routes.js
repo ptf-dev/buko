@@ -25,6 +25,7 @@ import { queueRefund } from './payments/queue.js'
 import { expirePendingPayments, failPayment, PAYMENT_HOLD_MINUTES, processRefunds, startPayment, verifyPayment } from './payments/service.js'
 import { pokConfigured, pokEnv } from './payments/providers.js'
 import { FINANCE_ROUTES } from './finance-routes.js'
+import { diagnoseSmtp } from './mail.js'
 import { adminMonitoring, adminResolveError, adminTestEmail, reportError, trackEvents } from './monitoring.js'
 import { fcmConfigured, removeSubscription, saveSubscription, sendDueReminders, sendReceipt, webPushConfigured } from './notify.js'
 
@@ -315,6 +316,13 @@ async function pushUnsubscribe({ req, body }) {
   const user = await requireUser(req, 'customer')
   await removeSubscription(user.id, str(body.endpoint, 'Endpoint', { max: 1000 }))
   return { body: { ok: true } }
+}
+
+/** TEMPORARY: SMTP diagnosis, protected by DIAG_TOKEN. Remove once email works. @type {Handler} */
+async function diagSmtp({ url }) {
+  const token = process.env.DIAG_TOKEN
+  if (!token || url.searchParams.get('token') !== token) throw new HttpError(404, 'Not found.')
+  return { body: await diagnoseSmtp() }
 }
 
 /** Which payment methods the app should offer. Public. @type {Handler} */
@@ -1243,6 +1251,7 @@ const ROUTES = [
   ['GET', 'orders', deviceOrders],
   ['POST', 'orders/:id/payment', verifyOrderPayment],
   ['GET', 'payments/config', paymentConfig],
+  ['GET', 'diag/smtp', diagSmtp],
   ['GET', 'push/config', pushConfig],
   ['POST', 'telemetry/error', reportError],
   ['POST', 'telemetry/events', trackEvents],
